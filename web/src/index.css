@@ -1,0 +1,254 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --border: #d8dbe0;
+  --text-muted: #6b7280;
+  --accent: #2563eb;
+  --danger: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f6f8;
+  color: #1f2328;
+}
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.app-brand {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.app-list-picker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.app-status {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.app-status-error {
+  color: var(--danger);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+select,
+input[type='text'],
+input:not([type]) {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+}
+
+/* --- List title --- */
+
+.list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.5rem;
+  margin: 0 0 16px;
+}
+
+.list-title-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.list-title-edit input {
+  font-size: 1.25rem;
+  flex: 1;
+}
+
+.icon-button {
+  border: none;
+  background: none;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px;
+}
+
+.field-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* --- Book rows (desktop: single row) --- */
+
+.book-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.book-row {
+  display: grid;
+  grid-template-columns: auto auto 56px 1fr auto auto auto;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.book-row-completed {
+  opacity: 0.6;
+}
+
+.book-nav-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.book-nav-buttons button {
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 4px;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.book-thumbnail {
+  width: 40px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #e5e7eb;
+}
+
+.book-thumbnail-placeholder {
+  display: block;
+}
+
+.book-title {
+  font-weight: 600;
+}
+
+.book-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.book-locations {
+  display: flex;
+  gap: 4px;
+}
+
+.book-locations select {
+  max-width: 120px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+}
+
+.drag-handle {
+  border: none;
+  background: none;
+  font-size: 1.25rem;
+  padding: 8px;
+  touch-action: none;
+}
+
+.revert-button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: white;
+  border-radius: 6px;
+}
+
+.revert-button:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+/* --- Mobile: collapse each row into a stacked card --- */
+
+@media (max-width: 640px) {
+  .book-row {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      'checkbox title drag'
+      'nav thumb meta'
+      'locations locations locations';
+  }
+
+  .book-complete-checkbox {
+    grid-area: checkbox;
+    width: 22px;
+    height: 22px;
+  }
+
+  .book-title {
+    grid-area: title;
+  }
+
+  .drag-handle {
+    grid-area: drag;
+  }
+
+  .book-nav-buttons {
+    grid-area: nav;
+    flex-direction: row;
+  }
+
+  .book-thumbnail {
+    grid-area: thumb;
+  }
+
+  .book-meta {
+    grid-area: meta;
+  }
+
+  .book-locations {
+    grid-area: locations;
+    flex-wrap: wrap;
+  }
+
+  .book-locations select {
+    max-width: none;
+    flex: 1 1 30%;
+  }
+
+  .book-nav-buttons button,
+  .drag-handle {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}

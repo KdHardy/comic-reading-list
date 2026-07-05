@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Add Comics to Reading List",
+  "version": "0.1.0",
+  "description": "Scrape comic details from supported sites and add them to your reading list.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "reading-list@example.com",
+      "strict_min_version": "109.0"
+    }
+  },
+  "icons": {
+    "16": "icons/icon128.png",
+    "48": "icons/icon128.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_icon": "icons/icon128.png"
+  },
+  "background": {
+    "scripts": ["src/lib/browser-polyfill.js", "src/lib/config.js", "src/lib/api.js", "src/lib/messaging.js", "src/background.js"]
+  },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://leagueofcomicgeeks.com/*",
+    "https://www.leagueofcomicgeeks.com/*",
+    "https://comicbookherald.com/*",
+    "https://www.comicbookherald.com/*",
+    "https://www.amazon.com/*",
+    "https://read.marvel.com/*",
+    "https://www.dcuniverseinfinite.com/*",
+    "https://www.hoopladigital.com/*",
+    "https://*.supabase.co/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://leagueofcomicgeeks.com/*", "https://www.leagueofcomicgeeks.com/*"],
+      "js": [
+        "src/lib/browser-polyfill.js",
+        "src/lib/messaging.js",
+        "src/lib/adapterRunner.js",
+        "src/adapters/leagueOfComicGeeks.js"
+      ],
+      "css": ["src/lib/adapter.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

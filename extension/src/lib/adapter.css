@@ -1,0 +1,45 @@
+.reading-list-floating-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2147483647;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.reading-list-floating-button:hover {
+  background: #1d4ed8;
+}
+
+.reading-list-card-button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1000;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: #2563eb;
+  color: white;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.reading-list-card-button:hover {
+  background: #1d4ed8;
+}
+
+.reading-list-card-button:disabled {
+  background: #16a34a;
+  cursor: default;
+}
