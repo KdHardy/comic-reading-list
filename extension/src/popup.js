@@ -1,13 +1,17 @@
+const listPickerRow = document.getElementById('list-picker-row');
 const listSelect = document.getElementById('list-select');
 const newListBtn = document.getElementById('new-list-btn');
+const newListRow = document.getElementById('new-list-row');
+const newListInput = document.getElementById('new-list-input');
+const newListConfirm = document.getElementById('new-list-confirm');
+const newListCancel = document.getElementById('new-list-cancel');
+const captureBtn = document.getElementById('capture-btn');
 const pendingListEl = document.getElementById('pending-list');
 const emptyMessage = document.getElementById('empty-message');
 const cancelBtn = document.getElementById('cancel-btn');
 const submitBtn = document.getElementById('submit-btn');
 const statusMessage = document.getElementById('status-message');
 const optionsLink = document.getElementById('options-link');
-
-const NEW_LIST_VALUE = '__new__';
 
 async function init() {
   await loadLists();
@@ -24,10 +28,6 @@ async function loadLists(selectId) {
       opt.textContent = list.list_name;
       listSelect.appendChild(opt);
     }
-    const newOpt = document.createElement('option');
-    newOpt.value = NEW_LIST_VALUE;
-    newOpt.textContent = '+ Create a New List';
-    listSelect.appendChild(newOpt);
 
     if (selectId) listSelect.value = String(selectId);
     else if (lists.length > 0) listSelect.value = String(lists[0].list_id);
@@ -36,26 +36,56 @@ async function loadLists(selectId) {
   }
 }
 
-listSelect.addEventListener('change', async () => {
-  if (listSelect.value === NEW_LIST_VALUE) {
-    const name = prompt('New reading list name:');
-    if (!name || !name.trim()) {
-      await loadLists();
-      return;
-    }
-    try {
-      const newId = await createList(name.trim());
-      await loadLists(newId);
-    } catch (e) {
-      statusMessage.textContent = e.message;
-    }
-  }
-  await renderPending();
+listSelect.addEventListener('change', renderPending);
+
+function showNewListRow() {
+  listPickerRow.hidden = true;
+  newListRow.hidden = false;
+  newListInput.value = '';
+  newListInput.focus();
+}
+
+function hideNewListRow() {
+  newListRow.hidden = true;
+  listPickerRow.hidden = false;
+}
+
+newListBtn.addEventListener('click', showNewListRow);
+
+newListCancel.addEventListener('click', hideNewListRow);
+
+newListInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') newListConfirm.click();
+  else if (e.key === 'Escape') hideNewListRow();
 });
 
-newListBtn.addEventListener('click', () => {
-  listSelect.value = NEW_LIST_VALUE;
-  listSelect.dispatchEvent(new Event('change'));
+newListConfirm.addEventListener('click', async () => {
+  const name = newListInput.value.trim();
+  if (!name) {
+    statusMessage.textContent = 'List name cannot be blank.';
+    return;
+  }
+  try {
+    statusMessage.textContent = '';
+    const newId = await createList(name);
+    hideNewListRow();
+    await loadLists(newId);
+    await renderPending();
+  } catch (e) {
+    statusMessage.textContent = e.message;
+  }
+});
+
+captureBtn.addEventListener('click', async () => {
+  statusMessage.textContent = '';
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error('No active tab found.');
+    await browser.tabs.sendMessage(tab.id, { type: MSG.ENTER_CAPTURE_MODE });
+    window.close();
+  } catch (e) {
+    statusMessage.textContent = "This page isn't a supported comic site yet.";
+  }
 });
 
 function escapeHtml(str) {
@@ -93,7 +123,7 @@ async function renderPending() {
     pendingListEl.appendChild(li);
   }
 
-  submitBtn.disabled = pending.length === 0 || listSelect.value === NEW_LIST_VALUE;
+  submitBtn.disabled = pending.length === 0 || !listSelect.value;
 }
 
 cancelBtn.addEventListener('click', async () => {

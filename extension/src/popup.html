@@ -7,13 +7,21 @@
   </head>
   <body>
     <div class="popup">
-      <div class="popup-row">
+      <div class="popup-row" id="list-picker-row">
         <select id="list-select" aria-label="Reading list"></select>
         <button id="new-list-btn" type="button" title="Create a new list">+</button>
       </div>
 
+      <div class="new-list-row" id="new-list-row" hidden>
+        <input id="new-list-input" type="text" placeholder="New list name" aria-label="New list name" />
+        <button id="new-list-confirm" type="button" class="icon-button icon-button-confirm" title="Create list">✔</button>
+        <button id="new-list-cancel" type="button" class="icon-button icon-button-cancel" title="Cancel">✕</button>
+      </div>
+
+      <button id="capture-btn" type="button" class="capture-button">📍 Add Comic from Page</button>
+
       <ul id="pending-list" class="pending-list"></ul>
-      <p id="empty-message" class="empty-message">Click a comic on the page to add it here.</p>
+      <p id="empty-message" class="empty-message">Use "Add Comic from Page" to select comics from the current tab.</p>
 
       <div class="popup-actions">
         <button id="cancel-btn" type="button">Cancel</button>

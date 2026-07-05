@@ -17,10 +17,11 @@ comic-reading-list/
 ## 1. Set up Supabase
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Open the SQL Editor and run the three migration files in `supabase/migrations/` **in order**
-   (`0001_init_schema.sql`, then `0002_functions.sql`, then `0003_security.sql`). Alternatively, if
-   you have the [Supabase CLI](https://supabase.com/docs/guides/cli) installed, `supabase link` this
-   project and run `supabase db push`.
+2. Open the SQL Editor and run the migration files in `supabase/migrations/` **in order**
+   (`0001_init_schema.sql`, `0002_functions.sql`, `0003_security.sql`, then
+   `0004_remove_book_from_list.sql`). Alternatively, if you have the
+   [Supabase CLI](https://supabase.com/docs/guides/cli) installed, `supabase link` this project and
+   run `supabase db push`.
 3. Set your write secret — this is what stands in for authentication, since the app has no login.
    Run in the SQL Editor (pick your own random string):
    ```sql
@@ -78,19 +79,26 @@ Copy-Item manifest.firefox.json manifest.json   # for Firefox
 
 `manifest.json` itself is gitignored on purpose so this copy step doesn't create merge noise.
 
-### Adding the remaining site adapters
+### Site adapter status
 
-Only **League of Comic Geeks** (`extension/src/adapters/leagueOfComicGeeks.js`) is implemented so
-far, as a proof of concept — and even that one has placeholder CSS selectors that need verifying
-against the live site (see the comment at the top of that file). Still to build, following the same
-pattern (implement `getPageType`, `getItemCards`/`parseCard` or `parseDetailPage`, then call
-`initAdapter(...)`):
+All six adapters from the spec now exist in `extension/src/adapters/`, following a shared pattern
+(implement `getPageType`, `getItemCards`/`parseCard` or `parseDetailPage`, then call
+`initAdapter(...)` — see `extension/src/lib/adapterRunner.js`). Verification status:
 
-- Comic Book Herald reading order lists
-- Amazon/Comixology issue pages
-- Marvel Unlimited issue pages
-- DC Universe Infinite issue pages
-- Hoopla Digital issue pages
+| Adapter | Status |
+|---|---|
+| `comicBookHerald.js` | **Verified** against a real live page — selectors confirmed accurate |
+| `leagueOfComicGeeks.js` | Best-effort placeholders — site is JS-rendered and wasn't inspectable; verify before relying on it |
+| `amazonComixology.js` | Best-effort — Amazon's `#productTitle`/`#landingImage` IDs are historically stable, but the detail-bullets (publisher/date) selectors are unverified |
+| `marvelUnlimited.js` | Best-effort placeholders, and targets the *public* `marvel.com/comics/issue/...` page, not the authenticated `read.marvel.com` reader (which requires a Marvel Unlimited login) |
+| `dcUniverseInfinite.js` | Best-effort placeholders, and targets the *public* `dc.com` issue page, not the authenticated DC Universe Infinite reader (which requires login) |
+| `hoopla.js` | Best-effort placeholders. Also note: a single Hoopla page can represent a bound collection spanning multiple issues (e.g. "#8-13") — this is treated as one book entry with that range as `number`, per the spec |
+
+**If you have active Marvel Unlimited / DC Universe Infinite subscriptions**, the Marvel and DC
+adapters could be rebuilt against the real authenticated reader pages instead of the public
+marketing pages — that would need inspecting a real issue page's markup while logged in (the same
+way `comicBookHerald.js` was verified against a live page). Worth doing as a follow-up if the public
+marvel.com/dc.com pages turn out not to be where you'd actually use the extension.
 
 ## Database schema
 
@@ -108,6 +116,7 @@ table writes are blocked by the RLS policies in `0003_security.sql` — only `SE
 
 ## Status / what's not built yet
 
-- Only one of six planned site adapters exists, and its selectors are unverified (see above).
+- All six site adapters exist; only `comicBookHerald.js` has been verified against a live page — see
+  the adapter status table above for the rest.
 - No automated tests yet.
 - iPad Safari extension (for remote add-to-list) is an open research item, not started.

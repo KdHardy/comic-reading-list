@@ -2,21 +2,21 @@
  * Adapter for leagueofcomicgeeks.com — both the "New Comics" list pages and
  * individual issue detail pages.
  *
- * IMPORTANT: the site's markup is rendered client-side by JavaScript and
- * wasn't inspectable while scaffolding this adapter (only pre-render HTML
- * was available). The selectors below are best-effort placeholders — before
- * relying on this adapter, open a real "New Comics" page and an issue page
- * in devtools, inspect the actual card/detail markup, and update SELECTORS
- * to match. Everything else (page-type detection, parsing flow, UI
- * injection) is wired up and shouldn't need to change.
+ * List-page selectors verified against a live page on 2026-07-05:
+ * https://leagueofcomicgeeks.com/comics/new-comics/2021/07/07
+ * Each release week is rendered as `li.issue` (168 elements on that page —
+ * this includes 141 hidden variant covers). `li.issue[data-parent="0"]`
+ * isolates just the 27 main (non-variant) cards. All cards are present in
+ * the initial DOM with no AJAX wait needed.
  */
 (function () {
   const SELECTORS = {
     // --- List page ("New Comics this week") ---
-    listItemCard: '.comic-item, .list-comic, [data-comic-id]', // TODO verify against live DOM
-    listTitle: '.title, .comic-title, a.title', // TODO verify
-    listPublisher: '.publisher', // TODO verify
-    listThumbnail: 'img',
+    listItemCard: 'li.issue[data-parent="0"]',
+    listTitle: '.title a',
+    listPublisher: '.publisher',
+    listDate: '.details .date',
+    listThumbnail: '.cover img',
 
     // --- Detail page (single issue) ---
     detailTitle: 'h1, .comic-title',
@@ -44,12 +44,18 @@
 
   function parseCard(card) {
     const { series, number } = splitSeriesAndNumber(textOf(card, SELECTORS.listTitle) || '');
+    // The date span carries a `data-date` attribute with a Unix epoch
+    // (seconds), which is more reliable than parsing the "Jul 6th, 2021"
+    // display text.
+    const epochSeconds = card.querySelector(SELECTORS.listDate)?.getAttribute('data-date');
+    const publishDate = epochSeconds ? new Date(Number(epochSeconds) * 1000).toISOString().slice(0, 10) : null;
+
     return {
       series,
       number,
       volume: null,
       publisher: textOf(card, SELECTORS.listPublisher),
-      publishDate: null,
+      publishDate,
       thumbnail: card.querySelector(SELECTORS.listThumbnail)?.src ?? null,
     };
   }

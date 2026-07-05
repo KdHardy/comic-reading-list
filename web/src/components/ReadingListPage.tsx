@@ -12,6 +12,7 @@ import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-ki
 import {
   fetchListDetail,
   fetchLocations,
+  removeBookFromList,
   reorderList,
   revertList,
   setBookCompleted,
@@ -111,6 +112,18 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     }
   }
 
+  async function handleRemove(bookId: number, title: string) {
+    if (!window.confirm(`Remove "${title}" from this list?`)) return;
+    const previousRows = rows;
+    setRows((prev) => prev.filter((r) => r.book_id !== bookId));
+    try {
+      await removeBookFromList(listId, bookId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to remove.');
+      setRows(previousRows);
+    }
+  }
+
   function handleMove(bookId: number, direction: 'up' | 'down') {
     const index = bookIdsInOrder.indexOf(bookId);
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -161,6 +174,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                 onToggleComplete={handleToggleComplete}
                 onMove={handleMove}
                 onLocationChange={handleLocationChange}
+                onRemove={handleRemove}
               />
             ))}
             {rows.length === 0 && (

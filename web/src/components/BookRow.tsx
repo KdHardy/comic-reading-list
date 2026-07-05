@@ -10,11 +10,12 @@ interface Props {
   onToggleComplete: (bookId: number, completed: boolean) => void;
   onMove: (bookId: number, direction: 'up' | 'down') => void;
   onLocationChange: (bookId: number, slot: 1 | 2 | 3, locationId: number | null) => void;
+  onRemove: (bookId: number, title: string) => void;
 }
 
 const LOCATION_FIELDS = ['location1_id', 'location2_id', 'location3_id'] as const;
 
-export function BookRow({ book, locations, isFirst, isLast, onToggleComplete, onMove, onLocationChange }: Props) {
+export function BookRow({ book, locations, isFirst, isLast, onToggleComplete, onMove, onLocationChange, onRemove }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: book.book_id });
 
   const style = {
@@ -80,6 +81,16 @@ export function BookRow({ book, locations, isFirst, isLast, onToggleComplete, on
 
       <button type="button" className="drag-handle" aria-label="Drag to reorder" {...attributes} {...listeners}>
         ☰
+      </button>
+
+      <button
+        type="button"
+        className="book-delete-button"
+        aria-label={`Remove ${titleText} from list`}
+        title="Remove from list"
+        onClick={() => onRemove(book.book_id, titleText)}
+      >
+        🗑
       </button>
     </div>
   );

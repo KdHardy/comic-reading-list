@@ -4,6 +4,7 @@ const MSG = {
   REMOVE_PENDING: 'REMOVE_PENDING', // popup -> background
   SUBMIT_PENDING: 'SUBMIT_PENDING', // popup -> background
   CLEAR_PENDING: 'CLEAR_PENDING', // popup -> background
+  ENTER_CAPTURE_MODE: 'ENTER_CAPTURE_MODE', // popup -> content script (sent directly to the active tab)
 };
 
 async function sendToBackground(type, payload) {

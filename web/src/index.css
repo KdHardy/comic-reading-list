@@ -117,7 +117,7 @@ input:not([type]) {
 
 .book-row {
   display: grid;
-  grid-template-columns: auto auto 56px 1fr auto auto auto;
+  grid-template-columns: auto auto 56px 1fr auto auto auto auto;
   align-items: center;
   gap: 12px;
   background: white;
@@ -185,6 +185,19 @@ input:not([type]) {
   touch-action: none;
 }
 
+.book-delete-button {
+  border: none;
+  background: none;
+  font-size: 1.1rem;
+  padding: 8px;
+  color: var(--danger);
+  border-radius: 4px;
+}
+
+.book-delete-button:hover {
+  background: #fef2f2;
+}
+
 .revert-button {
   margin-top: 20px;
   padding: 10px 20px;
@@ -202,11 +215,11 @@ input:not([type]) {
 
 @media (max-width: 640px) {
   .book-row {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr auto auto;
     grid-template-areas:
-      'checkbox title drag'
-      'nav thumb meta'
-      'locations locations locations';
+      'checkbox title drag delete'
+      'nav thumb thumb meta'
+      'locations locations locations locations';
   }
 
   .book-complete-checkbox {
@@ -221,6 +234,10 @@ input:not([type]) {
 
   .drag-handle {
     grid-area: drag;
+  }
+
+  .book-delete-button {
+    grid-area: delete;
   }
 
   .book-nav-buttons {
@@ -247,7 +264,8 @@ input:not([type]) {
   }
 
   .book-nav-buttons button,
-  .drag-handle {
+  .drag-handle,
+  .book-delete-button {
     min-width: 36px;
     min-height: 36px;
   }

@@ -98,6 +98,15 @@ export async function setBookLocation(bookId: number, slot: 1 | 2 | 3, locationI
   if (error) throw error;
 }
 
+export async function removeBookFromList(listId: number, bookId: number): Promise<void> {
+  const { error } = await supabase.rpc('remove_book_from_list', {
+    p_secret: WRITE_SECRET,
+    p_list_id: listId,
+    p_book_id: bookId,
+  });
+  if (error) throw error;
+}
+
 export async function reorderList(listId: number, bookIdsInOrder: number[]): Promise<void> {
   const { error } = await supabase.rpc('reorder_list', {
     p_secret: WRITE_SECRET,

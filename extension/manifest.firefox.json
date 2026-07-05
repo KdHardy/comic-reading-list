@@ -25,15 +25,18 @@
     "page": "src/options.html",
     "open_in_tab": true
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://leagueofcomicgeeks.com/*",
     "https://www.leagueofcomicgeeks.com/*",
     "https://comicbookherald.com/*",
     "https://www.comicbookherald.com/*",
+    "https://amazon.com/*",
     "https://www.amazon.com/*",
-    "https://read.marvel.com/*",
+    "https://marvel.com/*",
+    "https://www.marvel.com/*",
     "https://www.dcuniverseinfinite.com/*",
+    "https://hoopladigital.com/*",
     "https://www.hoopladigital.com/*",
     "https://*.supabase.co/*"
   ],
@@ -45,6 +48,61 @@
         "src/lib/messaging.js",
         "src/lib/adapterRunner.js",
         "src/adapters/leagueOfComicGeeks.js"
+      ],
+      "css": ["src/lib/adapter.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://comicbookherald.com/*", "https://www.comicbookherald.com/*"],
+      "js": [
+        "src/lib/browser-polyfill.js",
+        "src/lib/messaging.js",
+        "src/lib/adapterRunner.js",
+        "src/adapters/comicBookHerald.js"
+      ],
+      "css": ["src/lib/adapter.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://amazon.com/*", "https://www.amazon.com/*"],
+      "js": [
+        "src/lib/browser-polyfill.js",
+        "src/lib/messaging.js",
+        "src/lib/adapterRunner.js",
+        "src/adapters/amazonComixology.js"
+      ],
+      "css": ["src/lib/adapter.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://marvel.com/*", "https://www.marvel.com/*"],
+      "js": [
+        "src/lib/browser-polyfill.js",
+        "src/lib/messaging.js",
+        "src/lib/adapterRunner.js",
+        "src/adapters/marvelUnlimited.js"
+      ],
+      "css": ["src/lib/adapter.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.dcuniverseinfinite.com/*"],
+      "js": [
+        "src/lib/browser-polyfill.js",
+        "src/lib/messaging.js",
+        "src/lib/adapterRunner.js",
+        "src/adapters/dcUniverseInfinite.js"
+      ],
+      "css": ["src/lib/adapter.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://hoopladigital.com/*", "https://www.hoopladigital.com/*"],
+      "js": [
+        "src/lib/browser-polyfill.js",
+        "src/lib/messaging.js",
+        "src/lib/adapterRunner.js",
+        "src/adapters/hoopla.js"
       ],
       "css": ["src/lib/adapter.css"],
       "run_at": "document_idle"
