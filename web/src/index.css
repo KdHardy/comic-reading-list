@@ -117,7 +117,7 @@ input:not([type]) {
 
 .book-row {
   display: grid;
-  grid-template-columns: auto auto 56px 1fr auto auto auto auto;
+  grid-template-columns: auto auto 56px 1fr auto auto 170px auto auto;
   align-items: center;
   gap: 12px;
   background: white;
@@ -177,6 +177,93 @@ input:not([type]) {
   font-size: 0.85rem;
 }
 
+/* --- Notes --- */
+
+.book-notes {
+  display: flex;
+  flex-direction: column;
+  width: 170px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fafafa;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.book-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 2px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.book-notes-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.note-add-button {
+  border: none;
+  background: none;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px 6px;
+  color: var(--accent);
+  border-radius: 4px;
+}
+
+.note-add-button:hover {
+  background: #e5edff;
+}
+
+.book-notes-list {
+  max-height: 64px;
+  overflow-y: auto;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.note-item {
+  font-size: 0.78rem;
+  line-height: 1.3;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: text;
+}
+
+.note-item:hover {
+  background: #eef1f5;
+}
+
+.note-item a {
+  color: var(--accent);
+}
+
+.book-notes-empty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 3px 4px;
+}
+
+.note-edit-textarea {
+  font: inherit;
+  font-size: 0.78rem;
+  width: 100%;
+  min-height: 44px;
+  resize: vertical;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 3px 4px;
+}
+
 .drag-handle {
   border: none;
   background: none;
@@ -219,7 +306,8 @@ input:not([type]) {
     grid-template-areas:
       'checkbox title drag delete'
       'nav thumb thumb meta'
-      'locations locations locations locations';
+      'locations locations locations locations'
+      'notes notes notes notes';
   }
 
   .book-complete-checkbox {
@@ -261,6 +349,15 @@ input:not([type]) {
   .book-locations select {
     max-width: none;
     flex: 1 1 30%;
+  }
+
+  .book-notes {
+    grid-area: notes;
+    width: 100%;
+  }
+
+  .book-notes-list {
+    max-height: 100px;
   }
 
   .book-nav-buttons button,

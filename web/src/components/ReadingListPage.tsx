@@ -10,6 +10,8 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import {
+  addNote,
+  deleteNote,
   fetchListDetail,
   fetchLocations,
   removeBookFromList,
@@ -19,6 +21,7 @@ import {
   setBookLocation,
   snapshotFromRows,
   updateListTitle,
+  updateNote,
 } from '../lib/api';
 import type { ListSnapshot, LocationOption, ReadingOrderRow } from '../lib/types';
 import { EditableTitle } from './EditableTitle';
@@ -124,6 +127,46 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     }
   }
 
+  async function handleAddNote(bookId: number, text: string) {
+    try {
+      const note = await addNote(bookId, text);
+      setRows((prev) =>
+        prev.map((r) => (r.book_id === bookId ? { ...r, book: { ...r.book, notes: [...r.book.notes, note] } } : r))
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to add note.');
+    }
+  }
+
+  async function handleUpdateNote(noteId: number, text: string) {
+    const previousRows = rows;
+    setRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        book: { ...r.book, notes: r.book.notes.map((n) => (n.note_id === noteId ? { ...n, note_text: text } : n)) },
+      }))
+    );
+    try {
+      await updateNote(noteId, text);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to update note.');
+      setRows(previousRows);
+    }
+  }
+
+  async function handleDeleteNote(noteId: number) {
+    const previousRows = rows;
+    setRows((prev) =>
+      prev.map((r) => ({ ...r, book: { ...r.book, notes: r.book.notes.filter((n) => n.note_id !== noteId) } }))
+    );
+    try {
+      await deleteNote(noteId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to delete note.');
+      setRows(previousRows);
+    }
+  }
+
   function handleMove(bookId: number, direction: 'up' | 'down') {
     const index = bookIdsInOrder.indexOf(bookId);
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -175,6 +218,9 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                 onMove={handleMove}
                 onLocationChange={handleLocationChange}
                 onRemove={handleRemove}
+                onAddNote={handleAddNote}
+                onUpdateNote={handleUpdateNote}
+                onDeleteNote={handleDeleteNote}
               />
             ))}
             {rows.length === 0 && (

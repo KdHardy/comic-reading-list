@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Book, LocationOption } from '../lib/types';
+import { NoteList } from './NoteList';
 
 interface Props {
   book: Book;
@@ -11,11 +12,27 @@ interface Props {
   onMove: (bookId: number, direction: 'up' | 'down') => void;
   onLocationChange: (bookId: number, slot: 1 | 2 | 3, locationId: number | null) => void;
   onRemove: (bookId: number, title: string) => void;
+  onAddNote: (bookId: number, text: string) => void | Promise<void>;
+  onUpdateNote: (noteId: number, text: string) => void | Promise<void>;
+  onDeleteNote: (noteId: number) => void | Promise<void>;
 }
 
-const LOCATION_FIELDS = ['location1_id', 'location2_id', 'location3_id'] as const;
+// Location 3 is kept in the data model but hidden from the UI for now.
+const LOCATION_FIELDS = ['location1_id', 'location2_id'] as const;
 
-export function BookRow({ book, locations, isFirst, isLast, onToggleComplete, onMove, onLocationChange, onRemove }: Props) {
+export function BookRow({
+  book,
+  locations,
+  isFirst,
+  isLast,
+  onToggleComplete,
+  onMove,
+  onLocationChange,
+  onRemove,
+  onAddNote,
+  onUpdateNote,
+  onDeleteNote,
+}: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: book.book_id });
 
   const style = {
@@ -78,6 +95,13 @@ export function BookRow({ book, locations, isFirst, isLast, onToggleComplete, on
           </select>
         ))}
       </div>
+
+      <NoteList
+        notes={book.notes}
+        onAdd={(text) => onAddNote(book.book_id, text)}
+        onUpdate={onUpdateNote}
+        onDelete={onDeleteNote}
+      />
 
       <button type="button" className="drag-handle" aria-label="Drag to reorder" {...attributes} {...listeners}>
         ☰

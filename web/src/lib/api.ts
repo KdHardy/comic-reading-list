@@ -1,5 +1,5 @@
 import { supabase, WRITE_SECRET } from './supabaseClient';
-import type { Book, ListSnapshot, LocationOption, ReadingListSummary, ReadingOrderRow } from './types';
+import type { Book, ListSnapshot, LocationOption, Note, ReadingListSummary, ReadingOrderRow } from './types';
 
 export async function fetchLists(): Promise<ReadingListSummary[]> {
   const { data, error } = await supabase
@@ -28,7 +28,7 @@ export async function fetchListDetail(
     supabase.from('reading_list').select('*').eq('list_id', listId).single(),
     supabase
       .from('reading_order')
-      .select('list_id, book_id, read_order, book:book_id(*)')
+      .select('list_id, book_id, read_order, book:book_id(*, notes:note(note_id, book_id, note_text, created_at))')
       .eq('list_id', listId)
       .order('read_order', { ascending: true }),
   ]);
@@ -41,7 +41,12 @@ export async function fetchListDetail(
     // supabase-js types the embedded relation as an array; it's always a single row here.
     rows: ((rows ?? []) as unknown as (Omit<ReadingOrderRow, 'book'> & { book: Book })[]).map((r) => ({
       ...r,
-      book: r.book,
+      book: {
+        ...r.book,
+        notes: [...(r.book.notes ?? [])].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        ),
+      },
     })),
   };
 }
@@ -121,6 +126,38 @@ export async function revertList(listId: number, snapshot: ListSnapshot): Promis
     p_secret: WRITE_SECRET,
     p_list_id: listId,
     p_snapshot: snapshot,
+  });
+  if (error) throw error;
+}
+
+export async function addNote(bookId: number, noteText: string): Promise<Note> {
+  const { data, error } = await supabase.rpc('add_note', {
+    p_secret: WRITE_SECRET,
+    p_book_id: bookId,
+    p_note_text: noteText,
+  });
+  if (error) throw error;
+  return {
+    note_id: data as number,
+    book_id: bookId,
+    note_text: noteText.trim(),
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function updateNote(noteId: number, noteText: string): Promise<void> {
+  const { error } = await supabase.rpc('update_note', {
+    p_secret: WRITE_SECRET,
+    p_note_id: noteId,
+    p_note_text: noteText,
+  });
+  if (error) throw error;
+}
+
+export async function deleteNote(noteId: number): Promise<void> {
+  const { error } = await supabase.rpc('delete_note', {
+    p_secret: WRITE_SECRET,
+    p_note_id: noteId,
   });
   if (error) throw error;
 }

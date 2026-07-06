@@ -18,8 +18,8 @@ comic-reading-list/
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open the SQL Editor and run the migration files in `supabase/migrations/` **in order**
-   (`0001_init_schema.sql`, `0002_functions.sql`, `0003_security.sql`, then
-   `0004_remove_book_from_list.sql`). Alternatively, if you have the
+   (`0001_init_schema.sql`, `0002_functions.sql`, `0003_security.sql`,
+   `0004_remove_book_from_list.sql`, then `0005_notes.sql`). Alternatively, if you have the
    [Supabase CLI](https://supabase.com/docs/guides/cli) installed, `supabase link` this project and
    run `supabase db push`.
 3. Set your write secret — this is what stands in for authentication, since the app has no login.
@@ -108,11 +108,15 @@ See `supabase/migrations/0001_init_schema.sql` for the full definitions. Summary
 - `book` — a comic issue, deduplicated on `(series, volume, number, publisher)`
 - `reading_order` — join table (`list_id`, `book_id`, `read_order`)
 - `location` — fixed lookup table (Local, Marvel Unlimited, DC Universe Infinite, Hoopla, Comixology)
+- `note` — one or more free-text notes per book (`note_id`, `book_id`, `note_text`, `created_at`); see
+  `0005_notes.sql`. Book-level rather than list-level, since a book has one canonical set of notes
+  regardless of which list(s) it's on.
 - `app_secret` — single-row table holding the shared write secret; never exposed via the REST API
 
-All writes go through the RPC functions in `0002_functions.sql` (`add_book_to_list`,
-`reorder_list`, `revert_list`, etc.), each checking the shared secret before touching data. Direct
-table writes are blocked by the RLS policies in `0003_security.sql` — only `SELECT` is allowed.
+All writes go through the RPC functions in `0002_functions.sql`/`0005_notes.sql` (`add_book_to_list`,
+`reorder_list`, `revert_list`, `add_note`, `update_note`, `delete_note`, etc.), each checking the
+shared secret before touching data. Direct table writes are blocked by the RLS policies in
+`0003_security.sql`/`0005_notes.sql` — only `SELECT` is allowed.
 
 ## Status / what's not built yet
 

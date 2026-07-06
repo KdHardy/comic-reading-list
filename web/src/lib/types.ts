@@ -3,6 +3,13 @@ export interface LocationOption {
   location_name: string;
 }
 
+export interface Note {
+  note_id: number;
+  book_id: number;
+  note_text: string;
+  created_at: string;
+}
+
 export interface Book {
   book_id: number;
   publisher: string | null;
@@ -17,6 +24,7 @@ export interface Book {
   location3_id: number | null;
   completed: boolean;
   completed_date: string | null;
+  notes: Note[];
 }
 
 export interface ReadingOrderRow {

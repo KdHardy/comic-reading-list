@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/bookrow.tsx","./src/components/editabletitle.tsx","./src/components/readinglistpage.tsx","./src/lib/api.ts","./src/lib/supabaseclient.ts","./src/lib/types.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/bookrow.tsx","./src/components/editabletitle.tsx","./src/components/notelist.tsx","./src/components/readinglistpage.tsx","./src/lib/api.ts","./src/lib/supabaseclient.ts","./src/lib/types.ts"],"version":"5.9.3"}

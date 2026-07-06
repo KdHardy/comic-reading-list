@@ -18,6 +18,9 @@ async function init() {
   await renderPending();
 }
 
+// Resolves which list the picker should land on: an explicit selectId (e.g. a list just
+// created) wins, otherwise fall back to the last list the user had selected (persisted in
+// storage so it survives the popup closing during capture mode), otherwise the first list.
 async function loadLists(selectId) {
   try {
     const lists = await fetchLists();
@@ -29,14 +32,25 @@ async function loadLists(selectId) {
       listSelect.appendChild(opt);
     }
 
-    if (selectId) listSelect.value = String(selectId);
-    else if (lists.length > 0) listSelect.value = String(lists[0].list_id);
+    const validIds = new Set(lists.map((list) => list.list_id));
+    let targetId = selectId ?? (await getConfig()).lastListId;
+    if (targetId == null || !validIds.has(Number(targetId))) {
+      targetId = lists.length > 0 ? lists[0].list_id : null;
+    }
+
+    if (targetId != null) {
+      listSelect.value = String(targetId);
+      await setConfig({ lastListId: targetId });
+    }
   } catch (e) {
     statusMessage.textContent = e.message;
   }
 }
 
-listSelect.addEventListener('change', renderPending);
+listSelect.addEventListener('change', async () => {
+  await setConfig({ lastListId: listSelect.value ? Number(listSelect.value) : null });
+  await renderPending();
+});
 
 function showNewListRow() {
   listPickerRow.hidden = true;
