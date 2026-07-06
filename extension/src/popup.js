@@ -146,11 +146,18 @@ cancelBtn.addEventListener('click', async () => {
 });
 
 submitBtn.addEventListener('click', async () => {
+  const listId = Number(listSelect.value);
+  if (!listId) {
+    statusMessage.textContent = 'Select a reading list first.';
+    return;
+  }
+
   statusMessage.textContent = 'Submitting…';
   submitBtn.disabled = true;
   try {
-    await sendToBackground(MSG.SUBMIT_PENDING, { listId: Number(listSelect.value) });
-    statusMessage.textContent = 'Added!';
+    const result = await sendToBackground(MSG.SUBMIT_PENDING, { listId });
+    const count = result?.added ?? 0;
+    statusMessage.textContent = count === 1 ? 'Added 1 comic!' : `Added ${count} comics!`;
   } catch (e) {
     statusMessage.textContent = e.message;
   } finally {

@@ -46,24 +46,52 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
   );
 
-  async function load() {
-    setLoading(true);
+  async function load(options?: { silent?: boolean }) {
+    const silent = options?.silent ?? false;
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [{ list, rows: fetchedRows }, locs] = await Promise.all([fetchListDetail(listId), fetchLocations()]);
       setListName(list.list_name);
       setRows(fetchedRows);
       setLocations(locs);
-      setSnapshot(snapshotFromRows(list.list_name, fetchedRows));
+      if (!silent) {
+        setSnapshot(snapshotFromRows(list.list_name, fetchedRows));
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load reading list.');
+      if (!silent) {
+        setError(e instanceof Error ? e.message : 'Failed to load reading list.');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listId]);
+
+  // Refresh when the tab becomes visible (e.g. after adding comics in the extension)
+  // and poll quietly while the tab is open so changes appear without a manual reload.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        load({ silent: true });
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        load({ silent: true });
+      }
+    }, 20000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.clearInterval(interval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId]);
 

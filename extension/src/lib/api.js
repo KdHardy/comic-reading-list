@@ -21,6 +21,22 @@ async function supabaseRpc(name, params) {
   return res.status === 204 ? null : res.json();
 }
 
+/** Retry transient network failures — MV3 service workers can cold-start mid-submit. */
+async function supabaseRpcWithRetry(name, params, retries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await supabaseRpc(name, params);
+    } catch (e) {
+      lastError = e;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function supabaseSelect(table, query) {
   const config = await getConfig();
   if (!config.supabaseUrl || !config.anonKey) {
@@ -44,7 +60,10 @@ async function createList(name) {
 
 async function addBookToList(listId, book) {
   const config = await getConfig();
-  return supabaseRpc('add_book_to_list', {
+  if (!config.writeSecret) {
+    throw new Error('Write secret is missing. Open extension Settings and fill in the write secret.');
+  }
+  return supabaseRpcWithRetry('add_book_to_list', {
     p_secret: config.writeSecret,
     p_list_id: listId,
     p_series: book.series,

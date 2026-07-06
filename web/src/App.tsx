@@ -3,9 +3,23 @@ import { createReadingList, fetchLists } from './lib/api';
 import type { ReadingListSummary } from './lib/types';
 import { ReadingListPage } from './components/ReadingListPage';
 
+const LAST_LIST_KEY = 'comic-reading-list:lastListId';
+
+function readSavedListId(): number | null {
+  const raw = localStorage.getItem(LAST_LIST_KEY);
+  if (!raw) return null;
+  const id = Number(raw);
+  return Number.isFinite(id) ? id : null;
+}
+
+function saveListId(listId: number | null) {
+  if (listId == null) localStorage.removeItem(LAST_LIST_KEY);
+  else localStorage.setItem(LAST_LIST_KEY, String(listId));
+}
+
 export default function App() {
   const [lists, setLists] = useState<ReadingListSummary[]>([]);
-  const [selectedListId, setSelectedListId] = useState<number | null>(null);
+  const [selectedListId, setSelectedListId] = useState<number | null>(readSavedListId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,10 +29,19 @@ export default function App() {
       setLists(data);
       if (data.length === 0) {
         setSelectedListId(null);
-      } else if (preferListId && data.some((l) => l.list_id === preferListId)) {
-        setSelectedListId(preferListId);
-      } else if (!selectedListId) {
-        setSelectedListId(data[0].list_id);
+        saveListId(null);
+      } else {
+        const savedId = readSavedListId();
+        const candidate =
+          preferListId && data.some((l) => l.list_id === preferListId)
+            ? preferListId
+            : selectedListId && data.some((l) => l.list_id === selectedListId)
+              ? selectedListId
+              : savedId && data.some((l) => l.list_id === savedId)
+                ? savedId
+                : data[0].list_id;
+        setSelectedListId(candidate);
+        saveListId(candidate);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load reading lists.');
@@ -31,6 +54,23 @@ export default function App() {
     reloadLists();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pick up new lists created in the browser extension when returning to this tab.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        reloadLists();
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleListChange(listId: number) {
+    setSelectedListId(listId);
+    saveListId(listId);
+  }
 
   async function handleCreateList() {
     const name = window.prompt('New reading list name:');
@@ -53,7 +93,7 @@ export default function App() {
         <div className="app-list-picker">
           <select
             value={selectedListId ?? ''}
-            onChange={(e) => setSelectedListId(Number(e.target.value))}
+            onChange={(e) => handleListChange(Number(e.target.value))}
             aria-label="Choose reading list"
           >
             {lists.length === 0 && <option value="">No lists yet</option>}
