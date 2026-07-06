@@ -2,7 +2,8 @@
 
 A solo-use app for building comic reading lists: a responsive web page for viewing/reordering
 lists, backed by Supabase, plus a browser extension that scrapes comic details from a handful of
-sites and adds them to a list. See the original project plan for full design rationale.
+sites and adds them to a list. See [PLAN.md](PLAN.md) for the full design rationale, feature
+checklist, and remaining work.
 
 ## Project layout
 
@@ -81,24 +82,17 @@ Copy-Item manifest.firefox.json manifest.json   # for Firefox
 
 ### Site adapter status
 
-All six adapters from the spec now exist in `extension/src/adapters/`, following a shared pattern
-(implement `getPageType`, `getItemCards`/`parseCard` or `parseDetailPage`, then call
-`initAdapter(...)` — see `extension/src/lib/adapterRunner.js`). Verification status:
+All six adapters exist in `extension/src/adapters/`. See [PLAN.md](PLAN.md) for the full table.
+Summary:
 
 | Adapter | Status |
 |---|---|
-| `comicBookHerald.js` | **Verified** against a real live page — selectors confirmed accurate |
-| `leagueOfComicGeeks.js` | Best-effort placeholders — site is JS-rendered and wasn't inspectable; verify before relying on it |
-| `amazonComixology.js` | Best-effort — Amazon's `#productTitle`/`#landingImage` IDs are historically stable, but the detail-bullets (publisher/date) selectors are unverified |
-| `marvelUnlimited.js` | Best-effort placeholders, and targets the *public* `marvel.com/comics/issue/...` page, not the authenticated `read.marvel.com` reader (which requires a Marvel Unlimited login) |
-| `dcUniverseInfinite.js` | Best-effort placeholders, and targets the *public* `dc.com` issue page, not the authenticated DC Universe Infinite reader (which requires login) |
-| `hoopla.js` | Best-effort placeholders. Also note: a single Hoopla page can represent a bound collection spanning multiple issues (e.g. "#8-13") — this is treated as one book entry with that range as `number`, per the spec |
-
-**If you have active Marvel Unlimited / DC Universe Infinite subscriptions**, the Marvel and DC
-adapters could be rebuilt against the real authenticated reader pages instead of the public
-marketing pages — that would need inspecting a real issue page's markup while logged in (the same
-way `comicBookHerald.js` was verified against a live page). Worth doing as a follow-up if the public
-marvel.com/dc.com pages turn out not to be where you'd actually use the extension.
+| `comicBookHerald.js` | Verified (including plain-text bullet items) |
+| `leagueOfComicGeeks.js` | Verified (list + detail pages) |
+| `hoopla.js` | Verified (detail pages) |
+| `amazonComixology.js` | Best-effort — verify on live Amazon pages |
+| `marvelUnlimited.js` | Best-effort — public marvel.com pages only |
+| `dcUniverseInfinite.js` | Best-effort — public dc.com pages only |
 
 ## Database schema
 
@@ -118,9 +112,12 @@ All writes go through the RPC functions in `0002_functions.sql`/`0005_notes.sql`
 shared secret before touching data. Direct table writes are blocked by the RLS policies in
 `0003_security.sql`/`0005_notes.sql` — only `SELECT` is allowed.
 
-## Status / what's not built yet
+## Status
 
-- All six site adapters exist; only `comicBookHerald.js` has been verified against a live page — see
-  the adapter status table above for the rest.
-- No automated tests yet.
-- iPad Safari extension (for remote add-to-list) is an open research item, not started.
+The core app is built and deployed. See [PLAN.md](PLAN.md) for the full feature checklist.
+
+**Done:** database schema (5 migrations), web reading list page (reorder, revert, delete, notes,
+auto-refresh, list memory), browser extension (capture mode, six adapters, reliable submit),
+Cloudflare Pages deployment.
+
+**Not started / deferred:** automated tests, iPad Safari extension research, offline viewing.
