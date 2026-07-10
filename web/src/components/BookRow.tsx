@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Book, LocationOption } from '../lib/types';
+import { BookThumbnail } from './BookThumbnail';
 import { NoteList } from './NoteList';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
   onAddNote: (bookId: number, text: string) => void | Promise<void>;
   onUpdateNote: (noteId: number, text: string) => void | Promise<void>;
   onDeleteNote: (noteId: number) => void | Promise<void>;
+  onThumbnailCached: (bookId: number) => void;
 }
 
 // Location 3 is kept in the data model but hidden from the UI for now.
@@ -32,6 +34,7 @@ export function BookRow({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
+  onThumbnailCached,
 }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: book.book_id });
 
@@ -63,12 +66,11 @@ export function BookRow({
       </div>
 
       {book.thumbnail ? (
-        // eslint-disable-next-line jsx-a11y/img-redundant-alt
-        <img
-          className="book-thumbnail"
-          src={book.thumbnail}
-          alt=""
-          referrerPolicy="no-referrer"
+        <BookThumbnail
+          bookId={book.book_id}
+          sourceUrl={book.thumbnail}
+          cachedAt={book.thumbnail_cached_at}
+          onCached={onThumbnailCached}
         />
       ) : (
         <div className="book-thumbnail book-thumbnail-placeholder" />

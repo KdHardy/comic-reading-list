@@ -195,6 +195,15 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     }
   }
 
+  function handleThumbnailCached(bookId: number) {
+    const cachedAt = new Date().toISOString();
+    setRows((prev) =>
+      prev.map((row) =>
+        row.book_id === bookId ? { ...row, book: { ...row.book, thumbnail_cached_at: cachedAt } } : row
+      )
+    );
+  }
+
   function handleMove(bookId: number, direction: 'up' | 'down') {
     const index = bookIdsInOrder.indexOf(bookId);
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -249,6 +258,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                 onAddNote={handleAddNote}
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
+                onThumbnailCached={handleThumbnailCached}
               />
             ))}
             {rows.length === 0 && (

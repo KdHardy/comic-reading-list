@@ -1,5 +1,12 @@
 import { supabase, WRITE_SECRET } from './supabaseClient';
+import { blobToBase64 } from './thumbnailCache';
 import type { Book, ListSnapshot, LocationOption, Note, ReadingListSummary, ReadingOrderRow } from './types';
+
+const BOOK_FIELDS = `
+  book_id, publisher, series, volume, number, event, publish_date,
+  thumbnail, thumbnail_mime, thumbnail_cached_at,
+  location1_id, location2_id, location3_id, completed, completed_date
+`;
 
 export async function fetchLists(): Promise<ReadingListSummary[]> {
   const { data, error } = await supabase
@@ -28,7 +35,7 @@ export async function fetchListDetail(
     supabase.from('reading_list').select('*').eq('list_id', listId).single(),
     supabase
       .from('reading_order')
-      .select('list_id, book_id, read_order, book:book_id(*, notes:note(note_id, book_id, note_text, created_at))')
+      .select(`list_id, book_id, read_order, book:book_id(${BOOK_FIELDS}, notes:note(note_id, book_id, note_text, created_at))`)
       .eq('list_id', listId)
       .order('read_order', { ascending: true }),
   ]);
@@ -158,6 +165,35 @@ export async function deleteNote(noteId: number): Promise<void> {
   const { error } = await supabase.rpc('delete_note', {
     p_secret: WRITE_SECRET,
     p_note_id: noteId,
+  });
+  if (error) throw error;
+}
+
+export async function fetchBookThumbnail(
+  bookId: number
+): Promise<{ mime: string; data: string } | null> {
+  const { data, error } = await supabase
+    .from('book')
+    .select('thumbnail_data, thumbnail_mime')
+    .eq('book_id', bookId)
+    .single();
+
+  if (error) throw error;
+  if (!data?.thumbnail_data) return null;
+
+  return {
+    mime: data.thumbnail_mime ?? 'image/jpeg',
+    data: data.thumbnail_data as string,
+  };
+}
+
+export async function saveBookThumbnail(bookId: number, blob: Blob): Promise<void> {
+  const base64 = await blobToBase64(blob);
+  const { error } = await supabase.rpc('save_book_thumbnail', {
+    p_secret: WRITE_SECRET,
+    p_book_id: bookId,
+    p_thumbnail_data: base64,
+    p_thumbnail_mime: blob.type || 'image/jpeg',
   });
   if (error) throw error;
 }

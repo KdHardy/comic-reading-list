@@ -19,6 +19,8 @@ export interface Book {
   event: string | null;
   publish_date: string | null;
   thumbnail: string | null;
+  thumbnail_mime: string | null;
+  thumbnail_cached_at: string | null;
   location1_id: number | null;
   location2_id: number | null;
   location3_id: number | null;
