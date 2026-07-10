@@ -64,7 +64,12 @@ export function BookRow({
 
       {book.thumbnail ? (
         // eslint-disable-next-line jsx-a11y/img-redundant-alt
-        <img className="book-thumbnail" src={book.thumbnail} alt="" />
+        <img
+          className="book-thumbnail"
+          src={book.thumbnail}
+          alt=""
+          referrerPolicy="no-referrer"
+        />
       ) : (
         <div className="book-thumbnail book-thumbnail-placeholder" />
       )}

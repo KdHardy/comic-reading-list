@@ -39,8 +39,7 @@
     const titleCell = card.cells[1];
     const dateCell = card.cells[2];
 
-    const img = coverCell?.querySelector('img');
-    const thumbnail = img?.getAttribute('data-src') || img?.src || null;
+    const thumbnail = extractThumbnail(coverCell);
 
     const title = titleCell?.textContent.trim() || '';
     const publishDate = normalizeDate(dateCell?.textContent.trim() || '');
@@ -56,6 +55,30 @@
       publishDate,
       thumbnail,
     };
+  }
+
+  /** Fandom wraps cover art in a link to the full-size file; img src is often a 90px lazy preview. */
+  function extractThumbnail(coverCell) {
+    if (!coverCell) return null;
+
+    const fileLink = coverCell.querySelector('a[href*="nocookie.net"]');
+    if (fileLink?.href && !fileLink.href.startsWith('data:')) {
+      return fileLink.href;
+    }
+
+    const img = coverCell.querySelector('img');
+    if (!img) return null;
+
+    for (const url of [img.getAttribute('data-src'), img.src]) {
+      if (!url || url.startsWith('data:')) continue;
+      return toFullSizeFandomUrl(url);
+    }
+
+    return null;
+  }
+
+  function toFullSizeFandomUrl(url) {
+    return url.replace(/\/scale-to-width-down\/\d+/, '');
   }
 
   function metaRowText(card) {

@@ -79,6 +79,15 @@ Copy-Item manifest.firefox.json manifest.json   # for Firefox
 ```
 
 `manifest.json` itself is gitignored on purpose so this copy step doesn't create merge noise.
+After pulling extension changes, re-sync and reload:
+
+```
+cd extension
+./sync-manifest.ps1    # or: Copy-Item manifest.chrome.json manifest.json
+```
+
+Then reload the extension in Edge and **refresh any open comic-site tabs** so the new content
+scripts inject.
 
 ### Site adapter status
 
