@@ -122,7 +122,7 @@ erDiagram
 - [x] Remember last-selected list across popup open/close (`lastListId` in storage)
 - [x] Persist pending queue to storage (survives service worker restarts)
 - [x] Reliable submit: retries, partial-failure handling, duplicate-submit guard
-- [x] Six site adapters (see table below)
+- [x] Seven site adapters (see table below)
 - [ ] iPad Safari extension research (not started)
 
 ### Site adapters
@@ -132,6 +132,7 @@ erDiagram
 | `comicBookHerald.js` | List (blog reading orders) | ✅ Verified; plain-text bullets supported |
 | `leagueOfComicGeeks.js` | List + detail | ✅ Fixed against live DOM (2021 new-comics pages, issue detail) |
 | `hoopla.js` | Detail | ✅ Fixed (`/comic/` URL pattern, live selectors) |
+| `fandomWiki.js` | List (wiki tables) | ✅ Verified (Buffy publication-order page, 596 comics) |
 | `amazonComixology.js` | Detail | ⚠️ Best-effort — verify on live Amazon pages |
 | `marvelUnlimited.js` | Detail (public marvel.com pages) | ⚠️ Best-effort — targets public issue pages, not authenticated reader |
 | `dcUniverseInfinite.js` | Detail (public dc.com pages) | ⚠️ Best-effort — targets public issue pages, not authenticated reader |
@@ -152,6 +153,7 @@ Work was built in roughly this order (matching the original suggested implementa
 8. **Cloudflare deployment** — git-connected Pages/Workers deploy; env var troubleshooting.
 9. **Notes feature** — migration 0005, `NoteList` component, embed key fix (`notes:note` alias).
 10. **Reliability pass** — extension pending persistence + submit retries; web list memory + auto-refresh.
+11. **Fandom wiki adapter** — comic list tables on `*.fandom.com` wiki pages.
 
 ---
 

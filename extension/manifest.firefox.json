@@ -38,6 +38,7 @@
     "https://www.dcuniverseinfinite.com/*",
     "https://hoopladigital.com/*",
     "https://www.hoopladigital.com/*",
+    "https://*.fandom.com/*",
     "https://*.supabase.co/*"
   ],
   "content_scripts": [
@@ -103,6 +104,17 @@
         "src/lib/messaging.js",
         "src/lib/adapterRunner.js",
         "src/adapters/hoopla.js"
+      ],
+      "css": ["src/lib/adapter.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.fandom.com/*"],
+      "js": [
+        "src/lib/browser-polyfill.js",
+        "src/lib/messaging.js",
+        "src/lib/adapterRunner.js",
+        "src/adapters/fandomWiki.js"
       ],
       "css": ["src/lib/adapter.css"],
       "run_at": "document_idle"

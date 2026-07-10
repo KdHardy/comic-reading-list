@@ -90,6 +90,7 @@ Summary:
 | `comicBookHerald.js` | Verified (including plain-text bullet items) |
 | `leagueOfComicGeeks.js` | Verified (list + detail pages) |
 | `hoopla.js` | Verified (detail pages) |
+| `fandomWiki.js` | Verified (Fandom wiki comic list tables; e.g. Buffy publication order) |
 | `amazonComixology.js` | Best-effort — verify on live Amazon pages |
 | `marvelUnlimited.js` | Best-effort — public marvel.com pages only |
 | `dcUniverseInfinite.js` | Best-effort — public dc.com pages only |
