@@ -1,10 +1,22 @@
 /**
  * Adapter for Fandom wiki comic list pages (e.g. buffy.fandom.com).
  *
- * List-page selectors verified against a live page on 2026-07-10:
+ * List-page selectors verified against a live page on 2026-07-24:
  * https://buffy.fandom.com/wiki/Publication_order_of_comics
  *
- * Each comic spans two table rows inside `table.wikitable`:
+ * Fandom cover column structure (inside `table.wikitable`, 3-cell rows):
+ *   <td>
+ *     <a href="https://static.wikia.nocookie.net/.../File.jpg/revision/latest?cb=...">
+ *       <img class="mw-file-element lazyload"
+ *            src="data:image/gif;base64,..."           <!-- placeholder -->
+ *            data-src=".../revision/latest/scale-to-width-down/90?cb=..." />
+ *     </a>
+ *   </td>
+ *
+ * The anchor href is the full-size CDN URL. The img src/data-src are lazy previews.
+ * Always prefer the anchor href; fall back to img data-src/src with scaling stripped.
+ *
+ * Each comic spans two table rows:
  *   Row 1 (3 cells): cover image, title, release date
  *   Row 2 (2 cells): "Series: … Publisher: …", writer/artist credits
  * Some entries have an optional single-cell note row between them.
@@ -57,28 +69,46 @@
     };
   }
 
-  /** Fandom wraps cover art in a link to the full-size file; img src is often a 90px lazy preview. */
   function extractThumbnail(coverCell) {
     if (!coverCell) return null;
 
-    const fileLink = coverCell.querySelector('a[href*="nocookie.net"]');
-    if (fileLink?.href && !fileLink.href.startsWith('data:')) {
-      return fileLink.href;
+    // Full-size file link — present in the static HTML even before lazyload runs.
+    for (const link of coverCell.querySelectorAll('a[href]')) {
+      const url = normalizeFandomImageUrl(link.href);
+      if (url) return url;
     }
 
     const img = coverCell.querySelector('img');
     if (!img) return null;
 
-    for (const url of [img.getAttribute('data-src'), img.src]) {
-      if (!url || url.startsWith('data:')) continue;
-      return toFullSizeFandomUrl(url);
+    for (const attr of ['data-src', 'data-lazy-src', 'src']) {
+      const url = normalizeFandomImageUrl(img.getAttribute(attr));
+      if (url) return url;
     }
 
     return null;
   }
 
-  function toFullSizeFandomUrl(url) {
-    return url.replace(/\/scale-to-width-down\/\d+/, '');
+  function normalizeFandomImageUrl(raw) {
+    if (!raw || raw.startsWith('data:')) return null;
+
+    let url;
+    try {
+      url = new URL(raw, document.baseURI);
+    } catch {
+      return null;
+    }
+
+    if (url.protocol !== 'https:' || !url.hostname.endsWith('.nocookie.net')) {
+      return null;
+    }
+
+    url.pathname = url.pathname
+      .replace(/\/scale-to-width-down\/\d+/, '')
+      .replace(/\/scale-to-height-down\/\d+/, '')
+      .replace(/\/zoom-crop\/width-\d+-height-\d+/, '');
+
+    return url.href;
   }
 
   function metaRowText(card) {

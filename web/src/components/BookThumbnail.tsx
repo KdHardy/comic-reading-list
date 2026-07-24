@@ -121,7 +121,7 @@ export function BookThumbnail({ bookId, sourceUrl, cachedAt, onCached }: Props) 
 
     savingRef.current = true;
     try {
-      const response = await fetch(imageSrc);
+      const response = await fetch(imageSrc, { referrerPolicy: 'no-referrer' });
       if (!response.ok) return;
 
       const blob = await response.blob();
