@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Comic book">
+  <rect width="128" height="128" rx="24" fill="#2563eb"/>
+  <rect x="24" y="22" width="72" height="84" rx="6" fill="#ffffff"/>
+  <rect x="24" y="22" width="18" height="84" rx="6" fill="#1d4ed8"/>
+  <rect x="42" y="22" width="54" height="84" fill="#ffffff"/>
+  <path d="M52 38h36v6H52zm0 14h36v6H52zm0 14h28v6H52z" fill="#93c5fd"/>
+  <path d="M24 22h18v84H24z" fill="#1e40af" opacity="0.35"/>
+</svg>

@@ -4,13 +4,17 @@
   "version": "0.1.0",
   "description": "Scrape comic details from supported sites and add them to your reading list.",
   "icons": {
-    "16": "icons/icon128.png",
-    "48": "icons/icon128.png",
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "action": {
     "default_popup": "src/popup.html",
-    "default_icon": "icons/icon128.png"
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "background": {
     "service_worker": "src/background.js"

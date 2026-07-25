@@ -23,8 +23,10 @@ import {
   updateListTitle,
   updateNote,
 } from '../lib/api';
+import { mergeVisibleOrder, readHideReadPreference, writeHideReadPreference } from '../lib/listOrder';
 import type { ListSnapshot, LocationOption, ReadingOrderRow } from '../lib/types';
 import { EditableTitle } from './EditableTitle';
+import { HideReadToggle } from './HideReadToggle';
 import { BookRow } from './BookRow';
 
 interface Props {
@@ -40,6 +42,11 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reverting, setReverting] = useState(false);
+  const [hideRead, setHideRead] = useState(() => readHideReadPreference(listId));
+
+  useEffect(() => {
+    setHideRead(readHideReadPreference(listId));
+  }, [listId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -95,7 +102,31 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId]);
 
-  const bookIdsInOrder = useMemo(() => rows.map((r) => r.book_id), [rows]);
+  const visibleRows = useMemo(
+    () => (hideRead ? rows.filter((row) => !row.book.completed) : rows),
+    [rows, hideRead]
+  );
+
+  const visibleBookIds = useMemo(() => visibleRows.map((row) => row.book_id), [visibleRows]);
+
+  function handleHideReadChange(checked: boolean) {
+    setHideRead(checked);
+    writeHideReadPreference(listId, checked);
+  }
+
+  async function persistOrder(reorderedIds: number[]) {
+    const mergedIds = mergeVisibleOrder(rows, reorderedIds, hideRead);
+    setRows((prev) => {
+      const byId = new Map(prev.map((row) => [row.book_id, row]));
+      return mergedIds.map((id, idx) => ({ ...byId.get(id)!, read_order: (idx + 1) * 10 }));
+    });
+    try {
+      await reorderList(listId, mergedIds);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to reorder.');
+      load();
+    }
+  }
 
   async function handleTitleSave(newTitle: string) {
     await updateListTitle(listId, newTitle);
@@ -130,17 +161,20 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     }
   }
 
-  async function persistOrder(newBookIds: number[]) {
-    setRows((prev) => {
-      const byId = new Map(prev.map((r) => [r.book_id, r]));
-      return newBookIds.map((id, idx) => ({ ...byId.get(id)!, read_order: (idx + 1) * 10 }));
-    });
-    try {
-      await reorderList(listId, newBookIds);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to reorder.');
-      load();
-    }
+  function handleMove(bookId: number, direction: 'up' | 'down') {
+    const index = visibleBookIds.indexOf(bookId);
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= visibleBookIds.length) return;
+    persistOrder(arrayMove(visibleBookIds, index, targetIndex));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = visibleBookIds.indexOf(Number(active.id));
+    const newIndex = visibleBookIds.indexOf(Number(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+    persistOrder(arrayMove(visibleBookIds, oldIndex, newIndex));
   }
 
   async function handleRemove(bookId: number, title: string) {
@@ -204,22 +238,6 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     );
   }
 
-  function handleMove(bookId: number, direction: 'up' | 'down') {
-    const index = bookIdsInOrder.indexOf(bookId);
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= bookIdsInOrder.length) return;
-    persistOrder(arrayMove(bookIdsInOrder, index, targetIndex));
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = bookIdsInOrder.indexOf(Number(active.id));
-    const newIndex = bookIdsInOrder.indexOf(Number(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    persistOrder(arrayMove(bookIdsInOrder, oldIndex, newIndex));
-  }
-
   async function handleRevert() {
     if (!snapshot) return;
     if (!window.confirm('Revert all changes made since this page was loaded?')) return;
@@ -239,18 +257,23 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
 
   return (
     <div className="reading-list-page">
-      <EditableTitle title={listName} onSave={handleTitleSave} />
+      <div className="list-toolbar">
+        <div className="list-toolbar-title">
+          <EditableTitle title={listName} onSave={handleTitleSave} />
+        </div>
+        <HideReadToggle checked={hideRead} onChange={handleHideReadChange} />
+      </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={bookIdsInOrder} strategy={verticalListSortingStrategy}>
+        <SortableContext items={visibleBookIds} strategy={verticalListSortingStrategy}>
           <div className="book-list">
-            {rows.map((r, idx) => (
+            {visibleRows.map((r, idx) => (
               <BookRow
                 key={r.book_id}
                 book={r.book}
                 locations={locations}
                 isFirst={idx === 0}
-                isLast={idx === rows.length - 1}
+                isLast={idx === visibleRows.length - 1}
                 onToggleComplete={handleToggleComplete}
                 onMove={handleMove}
                 onLocationChange={handleLocationChange}
@@ -263,6 +286,9 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
             ))}
             {rows.length === 0 && (
               <p className="app-status">No comics in this list yet — add some from the browser extension.</p>
+            )}
+            {rows.length > 0 && hideRead && visibleRows.length === 0 && (
+              <p className="app-status">All comics in this list are marked read.</p>
             )}
           </div>
         </SortableContext>

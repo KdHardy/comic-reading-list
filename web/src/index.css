@@ -70,20 +70,51 @@ input:not([type]) {
 
 /* --- List title --- */
 
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.list-toolbar-title {
+  flex: 1;
+  min-width: 0;
+}
+
 .list-title {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 1.5rem;
-  margin: 0 0 16px;
+  margin: 0;
 }
 
 .list-title-edit {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
   position: relative;
+}
+
+.hide-read-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.hide-read-toggle input {
+  width: 40px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .list-title-edit input {

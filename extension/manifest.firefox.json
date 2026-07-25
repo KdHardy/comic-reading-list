@@ -10,13 +10,17 @@
     }
   },
   "icons": {
-    "16": "icons/icon128.png",
-    "48": "icons/icon128.png",
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "action": {
     "default_popup": "src/popup.html",
-    "default_icon": "icons/icon128.png"
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "background": {
     "scripts": ["src/lib/browser-polyfill.js", "src/lib/config.js", "src/lib/api.js", "src/lib/messaging.js", "src/background.js"]
