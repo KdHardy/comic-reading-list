@@ -4,6 +4,9 @@
  *
  * List-page selectors verified against a live page on 2026-07-05:
  * https://leagueofcomicgeeks.com/comics/new-comics/2021/07/07
+ * Detail-page selectors verified 2026-08-08:
+ * https://leagueofcomicgeeks.com/comic/1664000/batman-110
+ *
  * Each release week is rendered as `li.issue` (168 elements on that page —
  * this includes 141 hidden variant covers). `li.issue[data-parent="0"]`
  * isolates just the 27 main (non-variant) cards. All cards are present in
@@ -19,11 +22,11 @@
     listThumbnail: '.cover img',
 
     // --- Detail page (single issue) ---
-    detailTitle: 'h1, .comic-title',
+    detailTitle: '#comic-header h1',
     detailVolume: '.volume, .series-volume',
-    detailPublisher: '.publisher a, .publisher',
-    detailPublishDate: '.release-date, time',
-    detailThumbnail: '.comic-cover img, .cover img',
+    detailPublisher: '#comic-header .header-intro a[href^="/comics/"]',
+    detailReleaseLink: '#comic-header .header-intro a[href*="/comics/new-comics/"]',
+    detailThumbnail: '#comic-header .cover-art img, .comic-cover-view .cover-art img',
   };
 
   function getPageType() {
@@ -60,6 +63,38 @@
     };
   }
 
+  function parseDetailReleaseDate() {
+    const releaseLink = document.querySelector(SELECTORS.detailReleaseLink);
+    if (!releaseLink) return null;
+
+    const fromHref = releaseLink.getAttribute('href')?.match(/\/comics\/new-comics\/(\d{4})\/(\d{2})\/(\d{2})/);
+    if (fromHref) {
+      return `${fromHref[1]}-${fromHref[2]}-${fromHref[3]}`;
+    }
+
+    return normalizeDate(releaseLink.textContent.trim());
+  }
+
+  function parseDetailCoverDate() {
+    const blocks = document.querySelectorAll('#summary .details-addtl-block');
+    for (const block of blocks) {
+      if (block.querySelector('.name')?.textContent.trim() !== 'Cover Date') continue;
+      return normalizeDate(block.querySelector('.value')?.textContent.trim() ?? '');
+    }
+    return null;
+  }
+
+  function getDetailThumbnailUrl() {
+    const img = document.querySelector(SELECTORS.detailThumbnail);
+    const src = img?.getAttribute('src');
+    if (src && !src.startsWith('data:')) return src;
+
+    const lazySrc = img?.getAttribute('data-src');
+    if (lazySrc && !lazySrc.startsWith('data:')) return lazySrc;
+
+    return document.querySelector('meta[property="og:image"]')?.getAttribute('content') ?? null;
+  }
+
   function parseDetailPage() {
     const { series, number } = splitSeriesAndNumber(textOf(document, SELECTORS.detailTitle) || '');
     return {
@@ -67,8 +102,8 @@
       number,
       volume: textOf(document, SELECTORS.detailVolume),
       publisher: textOf(document, SELECTORS.detailPublisher),
-      publishDate: normalizeDate(textOf(document, SELECTORS.detailPublishDate)),
-      thumbnail: document.querySelector(SELECTORS.detailThumbnail)?.src ?? null,
+      publishDate: parseDetailReleaseDate() ?? parseDetailCoverDate(),
+      thumbnail: getDetailThumbnailUrl(),
     };
   }
 
