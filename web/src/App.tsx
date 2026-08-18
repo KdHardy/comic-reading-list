@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createReadingList, fetchLists } from './lib/api';
 import type { ReadingListSummary } from './lib/types';
 import { ReadingListPage } from './components/ReadingListPage';
@@ -17,13 +17,24 @@ function saveListId(listId: number | null) {
   else localStorage.setItem(LAST_LIST_KEY, String(listId));
 }
 
+function pickListId(lists: ReadingListSummary[], preferListId?: number): number {
+  const savedId = readSavedListId();
+  if (preferListId != null && lists.some((l) => l.list_id === preferListId)) {
+    return preferListId;
+  }
+  if (savedId != null && lists.some((l) => l.list_id === savedId)) {
+    return savedId;
+  }
+  return lists[0].list_id;
+}
+
 export default function App() {
   const [lists, setLists] = useState<ReadingListSummary[]>([]);
   const [selectedListId, setSelectedListId] = useState<number | null>(readSavedListId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function reloadLists(preferListId?: number) {
+  const reloadLists = useCallback(async (preferListId?: number) => {
     try {
       const data = await fetchLists();
       setLists(data);
@@ -31,15 +42,7 @@ export default function App() {
         setSelectedListId(null);
         saveListId(null);
       } else {
-        const savedId = readSavedListId();
-        const candidate =
-          preferListId && data.some((l) => l.list_id === preferListId)
-            ? preferListId
-            : selectedListId && data.some((l) => l.list_id === selectedListId)
-              ? selectedListId
-              : savedId && data.some((l) => l.list_id === savedId)
-                ? savedId
-                : data[0].list_id;
+        const candidate = pickListId(data, preferListId);
         setSelectedListId(candidate);
         saveListId(candidate);
       }
@@ -48,12 +51,11 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     reloadLists();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reloadLists]);
 
   // Pick up new lists created in the browser extension when returning to this tab.
   useEffect(() => {
@@ -64,8 +66,7 @@ export default function App() {
     }
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reloadLists]);
 
   function handleListChange(listId: number) {
     setSelectedListId(listId);
