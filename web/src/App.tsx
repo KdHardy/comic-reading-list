@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createReadingList, fetchLists } from './lib/api';
 import type { ReadingListSummary } from './lib/types';
 import { ReadingListPage } from './components/ReadingListPage';
+import { ThemeToggle } from './components/ThemeToggle';
 
 const LAST_LIST_KEY = 'comic-reading-list:lastListId';
 
@@ -107,6 +108,7 @@ export default function App() {
           <button type="button" onClick={handleCreateList}>
             + New list
           </button>
+          <ThemeToggle />
         </div>
       </header>
 

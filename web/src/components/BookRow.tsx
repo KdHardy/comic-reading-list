@@ -1,5 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { formatPublishDate } from '../lib/formatDate';
 import type { Book, LocationOption } from '../lib/types';
 import { BookThumbnail } from './BookThumbnail';
 import { NoteList } from './NoteList';
@@ -45,6 +46,7 @@ export function BookRow({
   };
 
   const titleText = `${book.series}${book.volume ? ` (Vol ${book.volume})` : ''}${book.number ? ` #${book.number}` : ''}`;
+  const publishDate = formatPublishDate(book.publish_date);
 
   return (
     <div ref={setNodeRef} style={style} className={`book-row${book.completed ? ' book-row-completed' : ''}`}>
@@ -80,7 +82,7 @@ export function BookRow({
 
       <div className="book-meta">
         <div className="book-publisher">{book.publisher}</div>
-        <div className="book-publish-date">{book.publish_date}</div>
+        {publishDate && <div className="book-publish-date">{publishDate}</div>}
       </div>
 
       <div className="book-locations">
