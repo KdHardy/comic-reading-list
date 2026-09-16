@@ -72,17 +72,27 @@ where not exists (
       and list_entry.book_id = reading_order.book_id
 );
 
+-- Populate/update the compatibility mirror from every canonical book entry so
+-- the preceding book-only frontend remains readable until its deployment.
+insert into public.reading_order (list_id, book_id, read_order)
+select list_id, book_id, read_order
+from public.list_entry
+where entry_type = 'book'
+on conflict (list_id, book_id)
+do update set read_order = excluded.read_order;
+
 -- Keep the entry sequence ahead of preserved production entry IDs.
 do $$
 declare
     v_sequence text := pg_get_serial_sequence('public.list_entry', 'entry_id');
     v_max_id bigint;
+    v_last_value bigint;
 begin
     if v_sequence is not null then
         select max(entry_id) into v_max_id from public.list_entry;
-        if v_max_id is null then
-            perform setval(v_sequence, 1, false);
-        else
+        execute format('select last_value from %s', v_sequence::regclass)
+        into v_last_value;
+        if v_max_id is not null and v_max_id > v_last_value then
             perform setval(v_sequence, v_max_id, true);
         end if;
     end if;
@@ -397,8 +407,6 @@ set search_path = public
 as $$
 declare
     v_item jsonb;
-    v_sequence text;
-    v_max_entry_id bigint;
 begin
     perform _check_secret(p_secret);
 
@@ -416,21 +424,26 @@ begin
         where list_id = p_list_id;
     end if;
 
-    delete from list_entry
-    where list_id = p_list_id
-      and entry_type = 'book'
-      and book_id not in (
-          select (item->>'book_id')::integer
-          from jsonb_array_elements(coalesce(p_snapshot->'books', '[]'::jsonb)) as item
-      );
+    -- New mixed snapshots include dividers and restore exact membership.
+    -- Legacy book-only snapshots retain add-only semantics and never remove
+    -- canonical dividers or concurrently-added books.
+    if p_snapshot ? 'dividers' then
+        delete from list_entry
+        where list_id = p_list_id
+          and entry_type = 'book'
+          and book_id not in (
+              select (item->>'book_id')::integer
+              from jsonb_array_elements(coalesce(p_snapshot->'books', '[]'::jsonb)) as item
+          );
 
-    delete from list_entry
-    where list_id = p_list_id
-      and entry_type = 'divider'
-      and entry_id not in (
-          select (item->>'entry_id')::integer
-          from jsonb_array_elements(coalesce(p_snapshot->'dividers', '[]'::jsonb)) as item
-      );
+        delete from list_entry
+        where list_id = p_list_id
+          and entry_type = 'divider'
+          and entry_id not in (
+              select (item->>'entry_id')::integer
+              from jsonb_array_elements(p_snapshot->'dividers') as item
+          );
+    end if;
 
     for v_item in
         select *
@@ -531,16 +544,6 @@ begin
             divider_name = excluded.divider_name,
             read_order = excluded.read_order;
     end loop;
-
-    v_sequence := pg_get_serial_sequence('public.list_entry', 'entry_id');
-    if v_sequence is not null then
-        select max(entry_id) into v_max_entry_id from list_entry;
-        perform setval(
-            v_sequence,
-            coalesce(v_max_entry_id, 1),
-            v_max_entry_id is not null
-        );
-    end if;
 
     delete from reading_order where list_id = p_list_id;
     insert into reading_order (list_id, book_id, read_order)
@@ -669,7 +672,9 @@ set search_path = public
 as $$
 declare
     v_book_id integer;
-    v_order integer := 10;
+    v_book_slots integer[];
+    v_book_count integer;
+    v_index integer;
 begin
     perform _check_secret(p_secret);
     perform 1
@@ -680,18 +685,45 @@ begin
         raise exception 'list % not found', p_list_id;
     end if;
 
-    foreach v_book_id in array p_book_ids
+    select
+        array_agg(read_order order by read_order, entry_id),
+        count(*)
+    into v_book_slots, v_book_count
+    from list_entry
+    where list_id = p_list_id
+      and entry_type = 'book';
+
+    if coalesce(cardinality(p_book_ids), 0) <> v_book_count
+       or (
+           select count(distinct book_id)
+           from unnest(coalesce(p_book_ids, array[]::integer[])) as book_id
+       ) <> v_book_count
+       or exists (
+           select 1
+           from unnest(coalesce(p_book_ids, array[]::integer[])) as requested(book_id)
+           where not exists (
+               select 1
+               from list_entry
+               where list_entry.list_id = p_list_id
+                 and list_entry.entry_type = 'book'
+                 and list_entry.book_id = requested.book_id
+           )
+       ) then
+        raise exception 'book order must contain every list book exactly once';
+    end if;
+
+    for v_index in 1..v_book_count
     loop
+        v_book_id := p_book_ids[v_index];
         update list_entry
-        set read_order = v_order
+        set read_order = v_book_slots[v_index]
         where list_id = p_list_id
           and entry_type = 'book'
           and book_id = v_book_id;
         update reading_order
-        set read_order = v_order
+        set read_order = v_book_slots[v_index]
         where list_id = p_list_id
           and book_id = v_book_id;
-        v_order := v_order + 10;
     end loop;
 end;
 $$;

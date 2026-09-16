@@ -75,6 +75,21 @@ begin
         raise exception 'reading_order contains a book missing from canonical list_entry';
     end if;
 
+    if exists (
+        select 1
+        from list_entry
+        where entry_type = 'book'
+          and not exists (
+              select 1
+              from reading_order
+              where reading_order.list_id = list_entry.list_id
+                and reading_order.book_id = list_entry.book_id
+                and reading_order.read_order = list_entry.read_order
+          )
+    ) then
+        raise exception 'reading_order compatibility mirror is incomplete';
+    end if;
+
     foreach v_signature in array array[
         'public.create_section_divider_v2(text,integer,text,integer)',
         'public.update_section_divider_v2(text,integer,text)',

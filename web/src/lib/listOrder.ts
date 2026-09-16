@@ -6,13 +6,10 @@ export function mergeVisibleEntryOrder(
   reorderedVisibleEntryIds: number[],
   hideRead: boolean
 ): number[] {
-  if (!hideRead) return reorderedVisibleEntryIds;
-
-  const fullIds = fullEntries.map((entry) => entry.entry_id);
-  const visibleSet = new Set(reorderedVisibleEntryIds);
-  const queue = [...reorderedVisibleEntryIds];
-
-  return fullIds.map((id) => (visibleSet.has(id) ? queue.shift()! : id));
+  // Reordering while books are hidden can move an unseen book across a section
+  // divider. Preserve the complete order until every entry is visible.
+  if (hideRead) return fullEntries.map((entry) => entry.entry_id);
+  return reorderedVisibleEntryIds;
 }
 
 export function hideReadStorageKey(listId: number): string {

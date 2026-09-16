@@ -120,6 +120,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     () => visibleEntries.map((entry) => entry.entry_id),
     [visibleEntries]
   );
+  const orderingDisabled = hideRead;
 
   function handleHideReadChange(checked: boolean) {
     setHideRead(checked);
@@ -187,6 +188,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   function handleMove(entryId: number, direction: 'up' | 'down') {
+    if (orderingDisabled) return;
     const index = visibleEntryIds.indexOf(entryId);
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= visibleEntryIds.length) return;
@@ -194,6 +196,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    if (orderingDisabled) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = visibleEntryIds.indexOf(Number(active.id));
@@ -341,6 +344,9 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
       <button type="button" className="add-divider-button" onClick={() => void handleAddDivider()}>
         + Add divider
       </button>
+      {orderingDisabled && (
+        <span className="ordering-disabled-note">Show read comics to reorder entries.</span>
+      )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleEntryIds} strategy={verticalListSortingStrategy}>
@@ -354,6 +360,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                   locations={locations}
                   isFirst={idx === 0}
                   isLast={idx === visibleEntries.length - 1}
+                  orderingDisabled={orderingDisabled}
                   onToggleComplete={handleToggleComplete}
                   onMove={handleMove}
                   onLocationChange={handleLocationChange}
@@ -369,6 +376,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                   entry={entry}
                   isFirst={idx === 0}
                   isLast={idx === visibleEntries.length - 1}
+                  orderingDisabled={orderingDisabled}
                   onMove={handleMove}
                   onSave={handleUpdateDivider}
                   onDelete={handleRemove}

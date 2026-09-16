@@ -229,6 +229,13 @@ input:not([type]) {
   background: var(--accent-hover-bg);
 }
 
+.ordering-disabled-note {
+  display: inline-block;
+  margin: 0 0 12px 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 .list-title-edit input {
   font-size: 1.25rem;
   flex: 1;

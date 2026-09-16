@@ -27,7 +27,7 @@ function entry(entryId: number, entryType: 'book' | 'divider'): ListEntry {
 }
 
 describe('mergeVisibleEntryOrder', () => {
-  it('keeps hidden completed books fixed while reordering books and dividers', () => {
+  it('preserves section membership by refusing reorder while books are hidden', () => {
     const entries = [
       entry(1, 'book'),
       entry(2, 'divider'),
@@ -36,7 +36,7 @@ describe('mergeVisibleEntryOrder', () => {
       entry(5, 'book'),
     ];
 
-    expect(mergeVisibleEntryOrder(entries, [5, 4, 2, 1], true)).toEqual([5, 4, 3, 2, 1]);
+    expect(mergeVisibleEntryOrder(entries, [5, 4, 2, 1], true)).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('uses the complete supplied entry order when nothing is hidden', () => {

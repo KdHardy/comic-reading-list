@@ -11,6 +11,7 @@ interface Props {
   locations: LocationOption[];
   isFirst: boolean;
   isLast: boolean;
+  orderingDisabled: boolean;
   onToggleComplete: (bookId: number, completed: boolean) => void;
   onMove: (entryId: number, direction: 'up' | 'down') => void;
   onLocationChange: (bookId: number, slot: 1 | 2 | 3, locationId: number | null) => void;
@@ -30,6 +31,7 @@ export function BookRow({
   locations,
   isFirst,
   isLast,
+  orderingDisabled,
   onToggleComplete,
   onMove,
   onLocationChange,
@@ -39,7 +41,10 @@ export function BookRow({
   onDeleteNote,
   onThumbnailCached,
 }: Props) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: entryId });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: entryId,
+    disabled: orderingDisabled,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -61,10 +66,10 @@ export function BookRow({
       />
 
       <div className="book-nav-buttons">
-        <button type="button" disabled={isFirst} onClick={() => onMove(entryId, 'up')} aria-label="Move up">
+        <button type="button" disabled={isFirst || orderingDisabled} onClick={() => onMove(entryId, 'up')} aria-label="Move up">
           ▲
         </button>
-        <button type="button" disabled={isLast} onClick={() => onMove(entryId, 'down')} aria-label="Move down">
+        <button type="button" disabled={isLast || orderingDisabled} onClick={() => onMove(entryId, 'down')} aria-label="Move down">
           ▼
         </button>
       </div>
@@ -114,7 +119,15 @@ export function BookRow({
         onDelete={onDeleteNote}
       />
 
-      <button type="button" className="drag-handle" aria-label="Drag to reorder" {...attributes} {...listeners}>
+      <button
+        type="button"
+        className="drag-handle"
+        aria-label="Drag to reorder"
+        disabled={orderingDisabled}
+        title={orderingDisabled ? 'Show read comics to reorder' : undefined}
+        {...attributes}
+        {...listeners}
+      >
         ☰
       </button>
 

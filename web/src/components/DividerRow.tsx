@@ -7,18 +7,28 @@ interface Props {
   entry: DividerListEntry;
   isFirst: boolean;
   isLast: boolean;
+  orderingDisabled: boolean;
   onMove: (entryId: number, direction: 'up' | 'down') => void;
   onSave: (entryId: number, dividerName: string) => Promise<void>;
   onDelete: (entryId: number, dividerName: string) => void;
 }
 
-export function DividerRow({ entry, isFirst, isLast, onMove, onSave, onDelete }: Props) {
+export function DividerRow({
+  entry,
+  isFirst,
+  isLast,
+  orderingDisabled,
+  onMove,
+  onSave,
+  onDelete,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.divider_name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.entry_id,
+    disabled: orderingDisabled,
   });
 
   useEffect(() => {
@@ -59,10 +69,10 @@ export function DividerRow({ entry, isFirst, isLast, onMove, onSave, onDelete }:
   return (
     <div ref={setNodeRef} style={style} className="section-divider">
       <div className="book-nav-buttons">
-        <button type="button" disabled={isFirst} onClick={() => onMove(entry.entry_id, 'up')} aria-label="Move divider up">
+        <button type="button" disabled={isFirst || orderingDisabled} onClick={() => onMove(entry.entry_id, 'up')} aria-label="Move divider up">
           ▲
         </button>
-        <button type="button" disabled={isLast} onClick={() => onMove(entry.entry_id, 'down')} aria-label="Move divider down">
+        <button type="button" disabled={isLast || orderingDisabled} onClick={() => onMove(entry.entry_id, 'down')} aria-label="Move divider down">
           ▼
         </button>
       </div>
@@ -107,6 +117,8 @@ export function DividerRow({ entry, isFirst, isLast, onMove, onSave, onDelete }:
         type="button"
         className="drag-handle"
         aria-label={`Drag divider ${entry.divider_name} to reorder`}
+        disabled={orderingDisabled}
+        title={orderingDisabled ? 'Show read comics to reorder' : undefined}
         {...attributes}
         {...listeners}
       >

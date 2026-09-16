@@ -97,8 +97,11 @@ async function testExistingCanonicalSchema() {
     ) values
       (10, 6, 'book', 1, null, 10),
       (11, 6, 'divider', null, 'Section', 20),
-      (12, 6, 'book', 2, null, 30);
-    select setval('list_entry_entry_id_seq', 12, true);
+      (12, 6, 'book', 2, null, 30),
+      (13, 7, 'book', 3, null, 40),
+      (100, 6, 'divider', null, 'Deleted high ID', 1000);
+    delete from list_entry where entry_id = 100;
+    select setval('list_entry_entry_id_seq', 100, true);
     insert into reading_order(list_id, book_id, read_order) values (7, 3, 40);
   `);
 
@@ -115,6 +118,35 @@ async function testExistingCanonicalSchema() {
   assert.equal(backfilled.rows[0].book_id, 3);
   const bookEntryId = backfilled.rows[0].entry_id;
 
+  const mirror = await db.query(`
+    select count(*)::integer as count
+    from reading_order
+    where list_id = 6
+  `);
+  assert.equal(mirror.rows[0].count, 2);
+
+  await db.query(`
+    select reorder_list(
+      'test-secret',
+      6,
+      array[2, 1]::integer[]
+    )
+  `);
+  const legacyOrder = await db.query(`
+    select entry_type, book_id, read_order
+    from list_entry
+    where list_id = 6
+    order by read_order, entry_id
+  `);
+  assert.deepEqual(
+    legacyOrder.rows,
+    [
+      { entry_type: 'book', book_id: 2, read_order: 10 },
+      { entry_type: 'divider', book_id: null, read_order: 20 },
+      { entry_type: 'book', book_id: 1, read_order: 30 },
+    ]
+  );
+
   const created = await db.query(`
     select create_section_divider_v2(
       'test-secret',
@@ -124,6 +156,7 @@ async function testExistingCanonicalSchema() {
     ) as id
   `);
   const dividerId = created.rows[0].id;
+  assert.ok(dividerId > 100);
   await db.query(
     `select update_section_divider_v2('test-secret', $1, 'Finale Updated')`,
     [dividerId]
@@ -193,6 +226,42 @@ async function testExistingCanonicalSchema() {
     where list_entry.list_id = 6 and list_entry.book_id = 4
   `);
   assert.equal(mirrored.rows[0].count, 1);
+
+  const legacySnapshot = {
+    list_name: 'Source',
+    books: [
+      {
+        book_id: 2,
+        read_order: 10,
+        completed: false,
+        completed_date: null,
+        location1_id: null,
+        location2_id: null,
+        location3_id: null,
+      },
+      {
+        book_id: 1,
+        read_order: 30,
+        completed: true,
+        completed_date: '2026-09-15T00:00:00Z',
+        location1_id: null,
+        location2_id: null,
+        location3_id: null,
+      },
+    ],
+  };
+  await db.query(
+    `select revert_list('test-secret', 6, $1::jsonb)`,
+    [JSON.stringify(legacySnapshot)]
+  );
+  const afterLegacyRevert = await db.query(`
+    select
+      count(*) filter (where entry_type = 'book')::integer as books,
+      count(*) filter (where entry_type = 'divider')::integer as dividers
+    from list_entry
+    where list_id = 6
+  `);
+  assert.deepEqual(afterLegacyRevert.rows, [{ books: 3, dividers: 1 }]);
 
   await db.query(`select remove_book_from_list('test-secret', 6, 4)`);
   const preserved = await db.query(`
