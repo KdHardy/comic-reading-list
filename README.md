@@ -54,7 +54,8 @@ ordered books and dividers while retaining `reading_order` as a compatibility mi
    same `(list_id, book_id)` in `list_entry`; the migration aborts safely if the unique index
    cannot be created.
 2. Run `supabase/migrations/0010_restore_list_entry_canonical.sql` in the SQL Editor. It preserves
-   existing entry IDs and dividers and backfills only books missing from `list_entry`.
+   existing entry IDs and dividers, backfills only books missing from `list_entry`, and mirrors
+   canonical books into `reading_order` for rollback compatibility.
 3. Run `supabase/verify_list_entry_recovery.sql`.
 4. Deploy the web build only after the migration and verification succeed. The preceding web
    release remains compatible during this interval through the mirrored `reading_order` table.
