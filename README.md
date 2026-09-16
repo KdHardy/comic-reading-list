@@ -99,6 +99,13 @@ The new account receives its own
 `comic-reading-list.<new-account-subdomain>.workers.dev` URL. Deploying there does not change or
 remove a Worker with the same name in another account.
 
+### Releasing changes
+
+Pull requests run CI but do not deploy automatically. An authorized maintainer can explicitly
+request a guarded merge by posting `/deploy` after CI passes; Cloudflare Workers Builds then deploys
+the resulting `master` commit. See [DEPLOYMENT.md](DEPLOYMENT.md) for usage, security constraints,
+verification, and rollback steps.
+
 ## 3. Set up the browser extension
 
 The extension has no build step — it's loaded straight from `extension/`.
