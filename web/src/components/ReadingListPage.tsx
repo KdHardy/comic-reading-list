@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import {
   addNote,
   createSectionDivider,
@@ -24,13 +25,22 @@ import {
   updateNote,
   updateSectionDivider,
 } from '../lib/api';
-import { mergeVisibleEntryOrder, readHideReadPreference, writeHideReadPreference } from '../lib/listOrder';
+import { defaultDividerName } from '../lib/divider';
+import {
+  computeDragReorder,
+  computeStepReorder,
+  filterVisibleEntries,
+  mergeVisibleEntryOrder,
+  readHideReadPreference,
+  writeHideReadPreference,
+} from '../lib/listOrder';
 import { snapshotFromEntries } from '../lib/listSnapshot';
 import { calculateReadingStats } from '../lib/readingStats';
-import { isBookEntry, type ListEntry, type ListSnapshot, type LocationOption } from '../lib/types';
+import { isBookEntry, type Book, type ListEntry, type ListSnapshot, type LocationOption } from '../lib/types';
 import { EditableTitle } from './EditableTitle';
 import { HideReadToggle } from './HideReadToggle';
 import { BookRow } from './BookRow';
+import { DividerInsertZone } from './DividerInsertZone';
 import { DividerRow } from './DividerRow';
 import { ReadingStats } from './ReadingStats';
 
@@ -55,7 +65,8 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   async function load(options?: { silent?: boolean }) {
@@ -107,13 +118,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId]);
 
-  const visibleEntries = useMemo(
-    () =>
-      hideRead
-        ? entries.filter((entry) => entry.entry_type === 'divider' || !entry.book.completed)
-        : entries,
-    [entries, hideRead]
-  );
+  const visibleEntries = useMemo(() => filterVisibleEntries(entries, hideRead), [entries, hideRead]);
   const readingStats = useMemo(() => calculateReadingStats(entries), [entries]);
 
   const visibleEntryIds = useMemo(
@@ -189,20 +194,18 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
 
   function handleMove(entryId: number, direction: 'up' | 'down') {
     if (orderingDisabled) return;
-    const index = visibleEntryIds.indexOf(entryId);
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= visibleEntryIds.length) return;
-    persistOrder(arrayMove(visibleEntryIds, index, targetIndex));
+    const reordered = computeStepReorder(visibleEntryIds, entryId, direction);
+    if (!reordered) return;
+    persistOrder(reordered);
   }
 
   function handleDragEnd(event: DragEndEvent) {
     if (orderingDisabled) return;
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = visibleEntryIds.indexOf(Number(active.id));
-    const newIndex = visibleEntryIds.indexOf(Number(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    persistOrder(arrayMove(visibleEntryIds, oldIndex, newIndex));
+    if (!over) return;
+    const reordered = computeDragReorder(visibleEntryIds, Number(active.id), Number(over.id));
+    if (!reordered) return;
+    persistOrder(reordered);
   }
 
   async function handleRemove(entryId: number, title: string) {
@@ -217,11 +220,11 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     }
   }
 
-  async function handleAddDivider() {
-    const name = window.prompt('Divider name:');
-    if (!name?.trim()) return;
+  async function handleInsertDivider(beforeEntryId: number, belowBook: Book) {
+    if (orderingDisabled) return;
+    const name = defaultDividerName(belowBook);
     try {
-      await createSectionDivider(listId, name.trim());
+      await createSectionDivider(listId, name, beforeEntryId);
       await load({ silent: true });
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to add divider.');
@@ -341,48 +344,55 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
 
       <ReadingStats stats={readingStats} />
 
-      <button type="button" className="add-divider-button" onClick={() => void handleAddDivider()}>
-        + Add divider
-      </button>
       {orderingDisabled && (
-        <span className="ordering-disabled-note">Show read comics to reorder entries.</span>
+        <span className="ordering-disabled-note">Show read comics to reorder or insert dividers.</span>
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleEntryIds} strategy={verticalListSortingStrategy}>
           <div className="book-list">
-            {visibleEntries.map((entry, idx) =>
-              entry.entry_type === 'book' ? (
-                <BookRow
-                  key={entry.entry_id}
-                  entryId={entry.entry_id}
-                  book={entry.book}
-                  locations={locations}
-                  isFirst={idx === 0}
-                  isLast={idx === visibleEntries.length - 1}
-                  orderingDisabled={orderingDisabled}
-                  onToggleComplete={handleToggleComplete}
-                  onMove={handleMove}
-                  onLocationChange={handleLocationChange}
-                  onRemove={handleRemove}
-                  onAddNote={handleAddNote}
-                  onUpdateNote={handleUpdateNote}
-                  onDeleteNote={handleDeleteNote}
-                  onThumbnailCached={handleThumbnailCached}
-                />
-              ) : (
-                <DividerRow
-                  key={entry.entry_id}
-                  entry={entry}
-                  isFirst={idx === 0}
-                  isLast={idx === visibleEntries.length - 1}
-                  orderingDisabled={orderingDisabled}
-                  onMove={handleMove}
-                  onSave={handleUpdateDivider}
-                  onDelete={handleRemove}
-                />
-              )
-            )}
+            {visibleEntries.map((entry, idx) => (
+              <Fragment key={entry.entry_id}>
+                {entry.entry_type === 'book' && (
+                  <DividerInsertZone
+                    label={`Insert section divider above ${entry.book.series}`}
+                    disabled={orderingDisabled}
+                    disabledReason="Show read comics to insert dividers"
+                    onInsert={() => void handleInsertDivider(entry.entry_id, entry.book)}
+                  />
+                )}
+                {entry.entry_type === 'book' ? (
+                  <BookRow
+                    key={entry.entry_id}
+                    entryId={entry.entry_id}
+                    book={entry.book}
+                    locations={locations}
+                    isFirst={idx === 0}
+                    isLast={idx === visibleEntries.length - 1}
+                    orderingDisabled={orderingDisabled}
+                    onToggleComplete={handleToggleComplete}
+                    onMove={handleMove}
+                    onLocationChange={handleLocationChange}
+                    onRemove={handleRemove}
+                    onAddNote={handleAddNote}
+                    onUpdateNote={handleUpdateNote}
+                    onDeleteNote={handleDeleteNote}
+                    onThumbnailCached={handleThumbnailCached}
+                  />
+                ) : (
+                  <DividerRow
+                    key={entry.entry_id}
+                    entry={entry}
+                    isFirst={idx === 0}
+                    isLast={idx === visibleEntries.length - 1}
+                    orderingDisabled={orderingDisabled}
+                    onMove={handleMove}
+                    onSave={handleUpdateDivider}
+                    onDelete={handleRemove}
+                  />
+                )}
+              </Fragment>
+            ))}
             {entries.length === 0 && (
               <p className="app-status">No comics in this list yet — add some from the browser extension.</p>
             )}

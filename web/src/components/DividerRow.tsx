@@ -35,7 +35,21 @@ export function DividerRow({
     setDraft(entry.divider_name);
   }, [entry.divider_name]);
 
-  async function save() {
+  function startEdit() {
+    setDraft(entry.divider_name);
+    setError(null);
+    setEditing(true);
+  }
+
+  // "Clear" — discard the in-progress edit and restore the persisted name.
+  function clearEdit() {
+    setDraft(entry.divider_name);
+    setError(null);
+    setEditing(false);
+  }
+
+  // "Complete" — persist the edit.
+  async function completeEdit() {
     const name = draft.trim();
     if (!name) {
       setError('Divider name cannot be blank.');
@@ -54,12 +68,6 @@ export function DividerRow({
     }
   }
 
-  function cancel() {
-    setDraft(entry.divider_name);
-    setError(null);
-    setEditing(false);
-  }
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -69,10 +77,20 @@ export function DividerRow({
   return (
     <div ref={setNodeRef} style={style} className="section-divider">
       <div className="book-nav-buttons">
-        <button type="button" disabled={isFirst || orderingDisabled} onClick={() => onMove(entry.entry_id, 'up')} aria-label="Move divider up">
+        <button
+          type="button"
+          disabled={isFirst || orderingDisabled}
+          onClick={() => onMove(entry.entry_id, 'up')}
+          aria-label="Move divider up"
+        >
           ▲
         </button>
-        <button type="button" disabled={isLast || orderingDisabled} onClick={() => onMove(entry.entry_id, 'down')} aria-label="Move divider down">
+        <button
+          type="button"
+          disabled={isLast || orderingDisabled}
+          onClick={() => onMove(entry.entry_id, 'down')}
+          aria-label="Move divider down"
+        >
           ▼
         </button>
       </div>
@@ -85,30 +103,45 @@ export function DividerRow({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') void save();
-              if (event.key === 'Escape') cancel();
+              if (event.key === 'Enter') void completeEdit();
+              if (event.key === 'Escape') clearEdit();
             }}
             aria-label="Divider name"
             autoFocus
+            disabled={saving}
           />
-          <button type="button" onClick={() => void save()} disabled={saving} aria-label="Save divider">
-            ✓
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Save divider name"
+            onClick={() => void completeEdit()}
+            disabled={saving}
+          >
+            ✔️
           </button>
-          <button type="button" onClick={cancel} disabled={saving} aria-label="Cancel divider edit">
-            ✕
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Cancel divider edit"
+            onClick={clearEdit}
+            disabled={saving}
+          >
+            ✖️
           </button>
-          {error && <span className="divider-error">{error}</span>}
+          {error && <span className="field-error">{error}</span>}
         </div>
       ) : (
-        <button
-          type="button"
-          className="section-divider-name"
-          onClick={() => setEditing(true)}
-          aria-label={`Edit divider ${entry.divider_name}`}
-          title="Edit divider"
-        >
+        <span className="section-divider-name">
           {entry.divider_name}
-        </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={`Edit divider ${entry.divider_name}`}
+            onClick={startEdit}
+          >
+            ✏️
+          </button>
+        </span>
       )}
 
       <div className="section-divider-line" aria-hidden="true" />
@@ -116,7 +149,7 @@ export function DividerRow({
       <button
         type="button"
         className="drag-handle"
-        aria-label={`Drag divider ${entry.divider_name} to reorder`}
+        aria-label="Drag to reorder"
         disabled={orderingDisabled}
         title={orderingDisabled ? 'Show read comics to reorder' : undefined}
         {...attributes}
@@ -128,8 +161,9 @@ export function DividerRow({
       <button
         type="button"
         className="book-delete-button"
+        aria-label={`Remove divider "${entry.divider_name}" from list`}
+        title="Remove from list"
         onClick={() => onDelete(entry.entry_id, entry.divider_name)}
-        aria-label={`Delete divider ${entry.divider_name}`}
       >
         🗑
       </button>
