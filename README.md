@@ -11,7 +11,7 @@ checklist, and remaining work.
 comic-reading-list/
 ├── supabase/
 │   └── migrations/       SQL migrations: schema, RPC functions, RLS policies
-├── web/                  React + Vite Reading List page (deploys to Cloudflare Pages)
+├── web/                  React + Vite Reading List page (Cloudflare Worker static assets)
 └── extension/            Manifest V3 browser extension (Edge + Firefox)
 ```
 
@@ -41,15 +41,23 @@ npm run dev
 ```
 
 Open the printed local URL to try it out. `npm run build` produces the `dist/` folder Cloudflare
-Pages serves.
+Workers serves as static assets.
 
-### Deploying to Cloudflare Pages
+### Deploying with Cloudflare Workers Builds
 
-1. Push this repo to GitHub (see below).
-2. In the Cloudflare dashboard, create a Pages project connected to the repo.
-3. Build settings: root directory `web`, build command `npm run build`, output directory `dist`.
-4. Add the three `VITE_*` environment variables from `web/.env` in the Pages project's settings.
-5. Every push to the connected branch redeploys automatically.
+1. In the target Cloudflare account, go to **Workers & Pages → Create application → Import a
+   repository**, authorize GitHub, and select this repository.
+2. Set the production branch to `master`, root directory to `web`, build command to
+   `npm run build`, and deploy command to `npm run deploy`.
+3. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_WRITE_SECRET` as build variables.
+   Vite embeds all three values in the client bundle, so marking one encrypted only hides it from
+   build logs; it does not make the resulting browser value secret.
+4. Save and deploy. The checked-in Wrangler configuration creates a static-assets Worker named
+   `comic-reading-list`; it intentionally contains no account ID or route.
+
+The new account receives its own
+`comic-reading-list.<new-account-subdomain>.workers.dev` URL. Deploying there does not change or
+remove a Worker with the same name in another account.
 
 ## 3. Set up the browser extension
 
