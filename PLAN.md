@@ -110,6 +110,14 @@ erDiagram
 - [x] Autosave on every interaction (complete, reorder, location, title, notes)
 - [x] Auto-refresh when tab becomes visible + 20s polling (picks up extension changes)
 - [x] Responsive layout for desktop and mobile
+- [x] Reading stats: total entries in the current list
+- [x] Reading stats: completed entries in the current list
+- [x] Reading stats: entries completed during the current local week
+- [x] Reading stats: active consecutive-day reading streak
+- [ ] Reading stats: average weekly reads
+- [ ] Reading stats: date difference for a section of a list
+- [ ] Reading stats: longest reading streak
+- [ ] Reading stats: all-lists presentation
 - [ ] Automated tests
 
 ### Browser extension

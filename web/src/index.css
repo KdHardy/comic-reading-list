@@ -170,6 +170,52 @@ input:not([type]) {
   cursor: pointer;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.reading-stats {
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.reading-stats-list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+}
+
+.reading-stat {
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.reading-stat + .reading-stat {
+  border-left: 1px solid var(--border);
+}
+
+.reading-stat dt {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.reading-stat dd {
+  margin: 2px 0 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
 .list-title-edit input {
   font-size: 1.25rem;
   flex: 1;
@@ -387,6 +433,18 @@ input:not([type]) {
 /* --- Mobile: collapse each row into a stacked card --- */
 
 @media (max-width: 640px) {
+  .reading-stats-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .reading-stat:nth-child(3) {
+    border-left: 0;
+  }
+
+  .reading-stat:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
   .book-row {
     grid-template-columns: auto 1fr auto auto;
     grid-template-areas:
