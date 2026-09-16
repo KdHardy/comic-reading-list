@@ -9,6 +9,17 @@ begin
         raise exception 'public.list_entry is missing';
     end if;
 
+    if not exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'list_entry'
+          and column_name = 'entry_id'
+          and data_type = 'bigint'
+    ) then
+        raise exception 'list_entry.entry_id must use bigint';
+    end if;
+
     if to_regclass('public.idx_list_entry_order') is null
        or to_regclass('public.idx_list_entry_unique_book') is null then
         raise exception 'list_entry indexes are missing';
@@ -91,21 +102,48 @@ begin
     end if;
 
     foreach v_signature in array array[
-        'public.create_section_divider_v2(text,integer,text,integer)',
-        'public.update_section_divider_v2(text,integer,text)',
-        'public.delete_list_entry_v2(text,integer,integer)',
-        'public.reorder_list_entries_v2(text,integer,integer[])',
+        'public.create_section_divider_v2(text,integer,text,bigint)',
+        'public.update_section_divider_v2(text,bigint,text)',
+        'public.delete_list_entry_v2(text,integer,bigint)',
+        'public.reorder_list_entries_v2(text,integer,bigint[])',
         'public.revert_list_entries_v2(text,integer,jsonb)',
-        'public.create_section_divider(text,integer,text,integer)',
-        'public.update_section_divider(text,integer,text)',
-        'public.delete_section_divider(text,integer)',
-        'public.reorder_list_entries(text,integer,integer[])'
+        'public.create_section_divider(text,integer,text,bigint)',
+        'public.update_section_divider(text,bigint,text)',
+        'public.delete_section_divider(text,bigint)',
+        'public.reorder_list_entries(text,integer,bigint[])'
     ]
     loop
         if to_regprocedure(v_signature) is null then
             raise exception 'required mixed-entry RPC % is missing', v_signature;
         end if;
     end loop;
+
+    if to_regprocedure(
+        'public.create_section_divider(text,integer,text,integer)'
+    ) is not null
+       or to_regprocedure(
+           'public.create_section_divider_v2(text,integer,text,integer)'
+       ) is not null
+       or to_regprocedure(
+           'public.update_section_divider(text,integer,text)'
+       ) is not null
+       or to_regprocedure(
+           'public.update_section_divider_v2(text,integer,text)'
+       ) is not null
+       or to_regprocedure(
+           'public.delete_section_divider(text,integer)'
+       ) is not null
+       or to_regprocedure(
+           'public.delete_list_entry_v2(text,integer,integer)'
+       ) is not null
+       or to_regprocedure(
+           'public.reorder_list_entries(text,integer,integer[])'
+       ) is not null
+       or to_regprocedure(
+           'public.reorder_list_entries_v2(text,integer,integer[])'
+       ) is not null then
+        raise exception 'ambiguous integer divider RPC overloads remain';
+    end if;
 
     raise notice 'list_entry recovery verification passed';
 end;

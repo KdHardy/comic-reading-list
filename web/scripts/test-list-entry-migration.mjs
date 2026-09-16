@@ -80,7 +80,7 @@ async function testExistingCanonicalSchema() {
   const db = new PGlite();
   await db.exec(`${baseSchema}
     create table public.list_entry (
-      entry_id serial primary key,
+      entry_id bigserial primary key,
       list_id integer not null references reading_list(list_id) on delete cascade,
       entry_type text not null,
       book_id integer references book(book_id) on delete cascade,
@@ -103,6 +103,18 @@ async function testExistingCanonicalSchema() {
     delete from list_entry where entry_id = 100;
     select setval('list_entry_entry_id_seq', 100, true);
     insert into reading_order(list_id, book_id, read_order) values (7, 3, 40);
+    create function create_section_divider(
+      text,
+      integer,
+      text,
+      bigint
+    ) returns bigint language sql as $$ select 1::bigint $$;
+    create function create_section_divider(
+      text,
+      integer,
+      text,
+      integer
+    ) returns integer language sql as $$ select 1 $$;
   `);
 
   await db.exec(migration);
@@ -162,7 +174,7 @@ async function testExistingCanonicalSchema() {
     [dividerId]
   );
   await db.query(
-    `select reorder_list_entries_v2('test-secret', 7, $1::integer[])`,
+    `select reorder_list_entries_v2('test-secret', 7, $1::bigint[])`,
     [[dividerId, bookEntryId]]
   );
 

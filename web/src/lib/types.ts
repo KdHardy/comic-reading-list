@@ -29,8 +29,11 @@ export interface Book {
   notes: Note[];
 }
 
+/** PostgreSQL bigint entry IDs are currently within JavaScript's safe integer range. */
+export type ListEntryId = number;
+
 interface ListEntryBase {
-  entry_id: number;
+  entry_id: ListEntryId;
   list_id: number;
   read_order: number;
 }

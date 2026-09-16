@@ -8,7 +8,7 @@
 begin;
 
 create table if not exists public.list_entry (
-    entry_id      serial primary key,
+    entry_id      bigserial primary key,
     list_id       integer not null references public.reading_list (list_id) on delete cascade,
     entry_type    text not null check (entry_type in ('book', 'divider')),
     book_id       integer references public.book (book_id) on delete cascade,
@@ -99,6 +99,27 @@ begin
 end;
 $$;
 
+-- Remove signatures introduced by preflight revisions of this migration.
+-- Production list_entry IDs and the established divider RPCs use bigint.
+drop function if exists public.create_section_divider(
+    text,
+    integer,
+    text,
+    integer
+);
+drop function if exists public.update_section_divider(text, integer, text);
+drop function if exists public.delete_section_divider(text, integer);
+drop function if exists public.reorder_list_entries(text, integer, integer[]);
+drop function if exists public.create_section_divider_v2(
+    text,
+    integer,
+    text,
+    integer
+);
+drop function if exists public.update_section_divider_v2(text, integer, text);
+drop function if exists public.delete_list_entry_v2(text, integer, integer);
+drop function if exists public.reorder_list_entries_v2(text, integer, integer[]);
+
 -- Add or refresh a book in the canonical table and compatibility mirror.
 create or replace function public.add_book_to_list(
     p_secret        text,
@@ -188,15 +209,15 @@ create or replace function public.create_section_divider_v2(
     p_secret text,
     p_list_id integer,
     p_divider_name text,
-    p_before_entry_id integer default null
+    p_before_entry_id bigint default null
 )
-returns integer
+returns bigint
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-    v_entry_id integer;
+    v_entry_id bigint;
     v_read_order integer;
 begin
     perform _check_secret(p_secret);
@@ -263,7 +284,7 @@ $$;
 
 create or replace function public.update_section_divider_v2(
     p_secret text,
-    p_divider_id integer,
+    p_divider_id bigint,
     p_divider_name text
 )
 returns void
@@ -292,7 +313,7 @@ $$;
 create or replace function public.delete_list_entry_v2(
     p_secret text,
     p_list_id integer,
-    p_entry_id integer
+    p_entry_id bigint
 )
 returns void
 language plpgsql
@@ -332,7 +353,7 @@ $$;
 create or replace function public.reorder_list_entries_v2(
     p_secret text,
     p_list_id integer,
-    p_entry_ids integer[]
+    p_entry_ids bigint[]
 )
 returns void
 language plpgsql
@@ -340,7 +361,7 @@ security definer
 set search_path = public
 as $$
 declare
-    v_entry_id integer;
+    v_entry_id bigint;
     v_expected_count integer;
     v_order integer := 10;
 begin
@@ -361,11 +382,11 @@ begin
     if coalesce(cardinality(p_entry_ids), 0) <> v_expected_count
        or (
            select count(distinct entry_id)
-           from unnest(coalesce(p_entry_ids, array[]::integer[])) as entry_id
+           from unnest(coalesce(p_entry_ids, array[]::bigint[])) as entry_id
        ) <> v_expected_count
        or exists (
            select 1
-           from unnest(coalesce(p_entry_ids, array[]::integer[])) as requested(entry_id)
+           from unnest(coalesce(p_entry_ids, array[]::bigint[])) as requested(entry_id)
            where not exists (
                select 1
                from list_entry
@@ -376,7 +397,7 @@ begin
         raise exception 'entry order must contain every list entry exactly once';
     end if;
 
-    foreach v_entry_id in array coalesce(p_entry_ids, array[]::integer[])
+    foreach v_entry_id in array coalesce(p_entry_ids, array[]::bigint[])
     loop
         update list_entry
         set read_order = v_order
@@ -440,7 +461,7 @@ begin
         where list_id = p_list_id
           and entry_type = 'divider'
           and entry_id not in (
-              select (item->>'entry_id')::integer
+              select (item->>'entry_id')::bigint
               from jsonb_array_elements(p_snapshot->'dividers') as item
           );
     end if;
@@ -470,7 +491,7 @@ begin
                 if exists (
                     select 1
                     from list_entry
-                    where entry_id = (v_item->>'entry_id')::integer
+                    where entry_id = (v_item->>'entry_id')::bigint
                 ) then
                     raise exception 'entry ID % is already in use', v_item->>'entry_id';
                 end if;
@@ -484,7 +505,7 @@ begin
                     read_order
                 )
                 values (
-                    (v_item->>'entry_id')::integer,
+                    (v_item->>'entry_id')::bigint,
                     p_list_id,
                     'book',
                     (v_item->>'book_id')::integer,
@@ -517,7 +538,7 @@ begin
         if exists (
             select 1
             from list_entry
-            where entry_id = (v_item->>'entry_id')::integer
+            where entry_id = (v_item->>'entry_id')::bigint
               and list_id <> p_list_id
         ) then
             raise exception 'divider entry % belongs to another list', v_item->>'entry_id';
@@ -532,7 +553,7 @@ begin
             read_order
         )
         values (
-            (v_item->>'entry_id')::integer,
+            (v_item->>'entry_id')::bigint,
             p_list_id,
             'divider',
             null,
@@ -559,9 +580,9 @@ create or replace function public.create_section_divider(
     p_secret text,
     p_list_id integer,
     p_divider_name text,
-    p_before_entry_id integer default null
+    p_before_entry_id bigint default null
 )
-returns integer
+returns bigint
 language sql
 security definer
 set search_path = public
@@ -576,7 +597,7 @@ $$;
 
 create or replace function public.update_section_divider(
     p_secret text,
-    p_divider_id integer,
+    p_divider_id bigint,
     p_divider_name text
 )
 returns void
@@ -589,7 +610,7 @@ $$;
 
 create or replace function public.delete_section_divider(
     p_secret text,
-    p_divider_id integer
+    p_divider_id bigint
 )
 returns void
 language sql
@@ -606,7 +627,7 @@ $$;
 create or replace function public.reorder_list_entries(
     p_secret text,
     p_list_id integer,
-    p_entry_ids integer[]
+    p_entry_ids bigint[]
 )
 returns void
 language sql
@@ -729,27 +750,27 @@ end;
 $$;
 
 revoke all on function
-    public.create_section_divider_v2(text, integer, text, integer),
-    public.update_section_divider_v2(text, integer, text),
-    public.delete_list_entry_v2(text, integer, integer),
-    public.reorder_list_entries_v2(text, integer, integer[]),
+    public.create_section_divider_v2(text, integer, text, bigint),
+    public.update_section_divider_v2(text, bigint, text),
+    public.delete_list_entry_v2(text, integer, bigint),
+    public.reorder_list_entries_v2(text, integer, bigint[]),
     public.revert_list_entries_v2(text, integer, jsonb),
-    public.create_section_divider(text, integer, text, integer),
-    public.update_section_divider(text, integer, text),
-    public.delete_section_divider(text, integer),
-    public.reorder_list_entries(text, integer, integer[])
+    public.create_section_divider(text, integer, text, bigint),
+    public.update_section_divider(text, bigint, text),
+    public.delete_section_divider(text, bigint),
+    public.reorder_list_entries(text, integer, bigint[])
 from public;
 
 grant execute on function
-    public.create_section_divider_v2(text, integer, text, integer),
-    public.update_section_divider_v2(text, integer, text),
-    public.delete_list_entry_v2(text, integer, integer),
-    public.reorder_list_entries_v2(text, integer, integer[]),
+    public.create_section_divider_v2(text, integer, text, bigint),
+    public.update_section_divider_v2(text, bigint, text),
+    public.delete_list_entry_v2(text, integer, bigint),
+    public.reorder_list_entries_v2(text, integer, bigint[]),
     public.revert_list_entries_v2(text, integer, jsonb),
-    public.create_section_divider(text, integer, text, integer),
-    public.update_section_divider(text, integer, text),
-    public.delete_section_divider(text, integer),
-    public.reorder_list_entries(text, integer, integer[])
+    public.create_section_divider(text, integer, text, bigint),
+    public.update_section_divider(text, bigint, text),
+    public.delete_section_divider(text, bigint),
+    public.reorder_list_entries(text, integer, bigint[])
 to anon, authenticated;
 
 grant execute on function
