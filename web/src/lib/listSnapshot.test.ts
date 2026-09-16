@@ -36,6 +36,7 @@ describe('snapshotFromEntries', () => {
       list_name: 'Gala',
       books: [
         {
+          entry_id: 10,
           book_id: 7,
           read_order: 20,
           completed: true,

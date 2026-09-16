@@ -235,6 +235,14 @@ begin
     )
     returning entry_id into v_entry_id;
 
+    update reading_order
+    set read_order = list_entry.read_order
+    from list_entry
+    where reading_order.list_id = p_list_id
+      and list_entry.list_id = p_list_id
+      and list_entry.entry_type = 'book'
+      and reading_order.book_id = list_entry.book_id;
+
     return v_entry_id;
 end;
 $$;
@@ -369,6 +377,8 @@ set search_path = public
 as $$
 declare
     v_item jsonb;
+    v_sequence text;
+    v_max_entry_id bigint;
 begin
     perform _check_secret(p_secret);
 
@@ -408,22 +418,55 @@ begin
             location3_id   = (v_item->>'location3_id')::integer
         where book_id = (v_item->>'book_id')::integer;
 
-        insert into list_entry (
-            list_id,
-            entry_type,
-            book_id,
-            divider_name,
-            read_order
-        )
-        values (
-            p_list_id,
-            'book',
-            (v_item->>'book_id')::integer,
-            null,
-            (v_item->>'read_order')::integer
-        )
-        on conflict (list_id, book_id) where entry_type = 'book'
-        do update set read_order = excluded.read_order;
+        update list_entry
+        set read_order = (v_item->>'read_order')::integer
+        where list_id = p_list_id
+          and entry_type = 'book'
+          and book_id = (v_item->>'book_id')::integer;
+
+        if not found then
+            if v_item ? 'entry_id' then
+                if exists (
+                    select 1
+                    from list_entry
+                    where entry_id = (v_item->>'entry_id')::integer
+                ) then
+                    raise exception 'entry ID % is already in use', v_item->>'entry_id';
+                end if;
+
+                insert into list_entry (
+                    entry_id,
+                    list_id,
+                    entry_type,
+                    book_id,
+                    divider_name,
+                    read_order
+                )
+                values (
+                    (v_item->>'entry_id')::integer,
+                    p_list_id,
+                    'book',
+                    (v_item->>'book_id')::integer,
+                    null,
+                    (v_item->>'read_order')::integer
+                );
+            else
+                insert into list_entry (
+                    list_id,
+                    entry_type,
+                    book_id,
+                    divider_name,
+                    read_order
+                )
+                values (
+                    p_list_id,
+                    'book',
+                    (v_item->>'book_id')::integer,
+                    null,
+                    (v_item->>'read_order')::integer
+                );
+            end if;
+        end if;
     end loop;
 
     for v_item in
@@ -460,6 +503,16 @@ begin
             divider_name = excluded.divider_name,
             read_order = excluded.read_order;
     end loop;
+
+    v_sequence := pg_get_serial_sequence('public.list_entry', 'entry_id');
+    if v_sequence is not null then
+        select max(entry_id) into v_max_entry_id from list_entry;
+        perform setval(
+            v_sequence,
+            coalesce(v_max_entry_id, 1),
+            v_max_entry_id is not null
+        );
+    end if;
 
     delete from reading_order where list_id = p_list_id;
     insert into reading_order (list_id, book_id, read_order)

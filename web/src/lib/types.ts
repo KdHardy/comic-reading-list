@@ -67,6 +67,7 @@ export interface ReadingListSummary {
 export interface ListSnapshot {
   list_name: string;
   books: {
+    entry_id: number;
     book_id: number;
     read_order: number;
     completed: boolean;

@@ -4,6 +4,7 @@ export function snapshotFromEntries(listName: string, entries: ListEntry[]): Lis
   return {
     list_name: listName,
     books: entries.filter(isBookEntry).map((entry) => ({
+      entry_id: entry.entry_id,
       book_id: entry.book_id,
       read_order: entry.read_order,
       completed: entry.book.completed,
