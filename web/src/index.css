@@ -216,19 +216,6 @@ input:not([type]) {
   font-weight: 600;
 }
 
-.add-divider-button {
-  margin: 0 0 12px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--accent);
-}
-
-.add-divider-button:hover {
-  background: var(--accent-hover-bg);
-}
-
 .ordering-disabled-note {
   display: inline-block;
   margin: 0 0 12px 8px;
@@ -265,6 +252,54 @@ input:not([type]) {
   gap: 8px;
 }
 
+.divider-insert-zone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 14px;
+  margin: -3px 0;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.divider-insert-zone:hover,
+.divider-insert-zone:focus-within {
+  opacity: 1;
+}
+
+.divider-insert-line {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.divider-insert-button {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 0.85rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.divider-insert-button:hover:not(:disabled) {
+  background: var(--accent-hover-bg);
+}
+
+.divider-insert-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .book-row {
   display: grid;
   grid-template-columns: auto auto 56px 1fr auto auto 170px auto auto;
@@ -296,16 +331,12 @@ input:not([type]) {
 }
 
 .section-divider-name {
-  border: 0;
-  border-radius: 4px;
-  background: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 8px;
   font-weight: 600;
   white-space: nowrap;
-}
-
-.section-divider-name:hover {
-  background: var(--accent-hover-bg);
 }
 
 .section-divider-edit {
@@ -317,26 +348,6 @@ input:not([type]) {
 
 .section-divider-edit input {
   min-width: 180px;
-}
-
-.section-divider-edit button {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-  min-width: 32px;
-  min-height: 32px;
-}
-
-.divider-error {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 1;
-  padding: 2px 4px;
-  background: var(--surface);
-  color: var(--danger);
-  font-size: 0.75rem;
-  white-space: nowrap;
 }
 
 .book-nav-buttons {
