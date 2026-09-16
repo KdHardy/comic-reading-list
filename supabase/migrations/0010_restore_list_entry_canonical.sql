@@ -112,7 +112,11 @@ declare
 begin
     perform _check_secret(p_secret);
 
-    if not exists (select 1 from reading_list where list_id = p_list_id) then
+    perform 1
+    from reading_list
+    where list_id = p_list_id
+    for update;
+    if not found then
         raise exception 'list % not found', p_list_id;
     end if;
 
@@ -290,6 +294,14 @@ declare
 begin
     perform _check_secret(p_secret);
 
+    perform 1
+    from reading_list
+    where list_id = p_list_id
+    for update;
+    if not found then
+        raise exception 'list % not found', p_list_id;
+    end if;
+
     delete from list_entry
     where list_id = p_list_id
       and entry_id = p_entry_id
@@ -323,6 +335,14 @@ declare
     v_order integer := 10;
 begin
     perform _check_secret(p_secret);
+
+    perform 1
+    from reading_list
+    where list_id = p_list_id
+    for update;
+    if not found then
+        raise exception 'list % not found', p_list_id;
+    end if;
 
     select count(*) into v_expected_count
     from list_entry
@@ -381,6 +401,14 @@ declare
     v_max_entry_id bigint;
 begin
     perform _check_secret(p_secret);
+
+    perform 1
+    from reading_list
+    where list_id = p_list_id
+    for update;
+    if not found then
+        raise exception 'list % not found', p_list_id;
+    end if;
 
     if p_snapshot ? 'list_name' then
         update reading_list
@@ -611,6 +639,14 @@ set search_path = public
 as $$
 begin
     perform _check_secret(p_secret);
+    perform 1
+    from reading_list
+    where list_id = p_list_id
+    for update;
+    if not found then
+        raise exception 'list % not found', p_list_id;
+    end if;
+
     delete from list_entry
     where list_id = p_list_id
       and entry_type = 'book'
@@ -636,6 +672,14 @@ declare
     v_order integer := 10;
 begin
     perform _check_secret(p_secret);
+    perform 1
+    from reading_list
+    where list_id = p_list_id
+    for update;
+    if not found then
+        raise exception 'list % not found', p_list_id;
+    end if;
+
     foreach v_book_id in array p_book_ids
     loop
         update list_entry

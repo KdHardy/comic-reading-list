@@ -90,7 +90,13 @@ export function DividerRow({ entry, isFirst, isLast, onMove, onSave, onDelete }:
           {error && <span className="divider-error">{error}</span>}
         </div>
       ) : (
-        <button type="button" className="section-divider-name" onClick={() => setEditing(true)}>
+        <button
+          type="button"
+          className="section-divider-name"
+          onClick={() => setEditing(true)}
+          aria-label={`Edit divider ${entry.divider_name}`}
+          title="Edit divider"
+        >
           {entry.divider_name}
         </button>
       )}
