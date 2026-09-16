@@ -34,6 +34,7 @@ alter table public.reading_order enable row level security;
 revoke insert, update, delete, truncate, references, trigger
     on table public.reading_order from anon, authenticated;
 grant select on table public.reading_order to anon, authenticated;
+grant all on table public.reading_order to service_role;
 
 drop policy if exists "public read access" on public.reading_order;
 create policy "public read access"

@@ -108,7 +108,12 @@ begin
     if not has_table_privilege('anon', 'public.reading_order', 'SELECT')
        or not has_table_privilege('authenticated', 'public.reading_order', 'SELECT')
        or has_table_privilege('anon', 'public.reading_order', 'INSERT, UPDATE, DELETE')
-       or has_table_privilege('authenticated', 'public.reading_order', 'INSERT, UPDATE, DELETE') then
+       or has_table_privilege('authenticated', 'public.reading_order', 'INSERT, UPDATE, DELETE')
+       or not has_table_privilege(
+           'service_role',
+           'public.reading_order',
+           'SELECT, INSERT, UPDATE, DELETE'
+       ) then
         raise exception 'reading_order table privileges are incorrect';
     end if;
 
