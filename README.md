@@ -18,11 +18,9 @@ comic-reading-list/
 ## 1. Set up Supabase
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Open the SQL Editor and run the migration files in `supabase/migrations/` **in order**
-   (`0001_init_schema.sql`, `0002_functions.sql`, `0003_security.sql`,
-   `0004_remove_book_from_list.sql`, then `0005_notes.sql`). Alternatively, if you have the
-   [Supabase CLI](https://supabase.com/docs/guides/cli) installed, `supabase link` this project and
-   run `supabase db push`.
+2. Open the SQL Editor and run the migration files in `supabase/migrations/` **in numeric order**.
+   Alternatively, if you have the [Supabase CLI](https://supabase.com/docs/guides/cli) installed,
+   `supabase link` this project and run `supabase db push`.
 3. Set your write secret — this is what stands in for authentication, since the app has no login.
    Run in the SQL Editor (pick your own random string):
    ```sql
@@ -30,6 +28,22 @@ comic-reading-list/
    ```
 4. From **Project Settings → API**, copy your **Project URL** and **anon public key** — you'll need
    both for the web app and the extension.
+
+### Repairing a missing `reading_order` relation
+
+If PostgREST reports `PGRST205` for `public.reading_order`, do not replay the initial migration:
+
+1. Back up the database and confirm `reading_list`, `book`, and `app_secret` exist.
+2. In the SQL Editor for the affected project, run
+   `supabase/migrations/0009_repair_reading_order.sql`.
+3. Run `supabase/verify_reading_order_repair.sql`. It raises an exception on any schema,
+   privilege, policy, or RPC mismatch.
+4. Confirm an anonymous `GET /rest/v1/reading_order?select=list_id,book_id,read_order&limit=1`
+   returns `200`, then reload the web app.
+
+The repair is idempotent and does not touch lookup seeds, books, or lists. If the table was truly
+missing rather than only absent from PostgREST's schema cache, it is recreated empty; restoring
+historical list-to-book associations requires a separate data backup.
 
 ## 2. Set up the web app
 
