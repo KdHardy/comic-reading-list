@@ -153,24 +153,26 @@ See `supabase/migrations/0001_init_schema.sql` for the full definitions. Summary
 
 - `reading_list` — a list (`list_id`, `list_name`, `completed`, `created_date`, `completed_date`)
 - `book` — a comic issue, deduplicated on `(series, volume, number, publisher)`
-- `reading_order` — join table (`list_id`, `book_id`, `read_order`)
+- `list_entry` — canonical mixed list order for books and named section dividers; see
+  `0010_restore_list_entry_canonical.sql`
+- `reading_order` — temporary book-only compatibility mirror retained for rollback
 - `location` — fixed lookup table (Local, Marvel Unlimited, DC Universe Infinite, Hoopla, Comixology)
 - `note` — one or more free-text notes per book (`note_id`, `book_id`, `note_text`, `created_at`); see
   `0005_notes.sql`. Book-level rather than list-level, since a book has one canonical set of notes
   regardless of which list(s) it's on.
 - `app_secret` — single-row table holding the shared write secret; never exposed via the REST API
 
-All writes go through the RPC functions in `0002_functions.sql`/`0005_notes.sql` (`add_book_to_list`,
-`reorder_list`, `revert_list`, `add_note`, `update_note`, `delete_note`, etc.), each checking the
-shared secret before touching data. Direct table writes are blocked by the RLS policies in
-`0003_security.sql`/`0005_notes.sql` — only `SELECT` is allowed.
+All writes go through the RPC functions in the migrations (`add_book_to_list`,
+`reorder_list_entries_v2`, `create_section_divider_v2`, `revert_list_entries_v2`, `add_note`,
+etc.), each checking the shared secret before touching data. Direct table writes are blocked by
+RLS — only `SELECT` is allowed.
 
 ## Status
 
 The core app is built and deployed. See [PLAN.md](PLAN.md) for the full feature checklist.
 
-**Done:** database schema (5 migrations), web reading list page (reorder, revert, delete, notes,
-auto-refresh, list memory), browser extension (capture mode, six adapters, reliable submit),
-Cloudflare Pages deployment.
+**Done:** database schema, web reading list page (mixed book/divider ordering, stats, revert,
+delete, notes, auto-refresh, list memory), browser extension (capture mode, six adapters,
+reliable submit), Cloudflare Worker deployment, focused automated tests.
 
-**Not started / deferred:** automated tests, iPad Safari extension research, offline viewing.
+**Not started / deferred:** iPad Safari extension research, offline viewing.
