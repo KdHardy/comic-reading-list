@@ -81,6 +81,10 @@ Workers serves as static assets.
 
 ### Deploying with Cloudflare Workers Builds
 
+Once the repository is connected, every merge to `master` triggers the configured Cloudflare
+Workers build and production deploy. Confirm each rollout in the Worker's **Deployments → Build
+history**.
+
 1. In the target Cloudflare account, go to **Workers & Pages → Create application → Import a
    repository**, authorize GitHub, and select this repository.
 2. Set the production branch to `master`, root directory to `web`, build command to
