@@ -24,10 +24,12 @@ import {
   updateNote,
 } from '../lib/api';
 import { mergeVisibleOrder, readHideReadPreference, writeHideReadPreference } from '../lib/listOrder';
+import { calculateReadingStats } from '../lib/readingStats';
 import type { ListSnapshot, LocationOption, ReadingOrderRow } from '../lib/types';
 import { EditableTitle } from './EditableTitle';
 import { HideReadToggle } from './HideReadToggle';
 import { BookRow } from './BookRow';
+import { ReadingStats } from './ReadingStats';
 
 interface Props {
   listId: number;
@@ -106,6 +108,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     () => (hideRead ? rows.filter((row) => !row.book.completed) : rows),
     [rows, hideRead]
   );
+  const readingStats = useMemo(() => calculateReadingStats(rows), [rows]);
 
   const visibleBookIds = useMemo(() => visibleRows.map((row) => row.book_id), [visibleRows]);
 
@@ -263,6 +266,8 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
         </div>
         <HideReadToggle checked={hideRead} onChange={handleHideReadChange} />
       </div>
+
+      <ReadingStats stats={readingStats} />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleBookIds} strategy={verticalListSortingStrategy}>
