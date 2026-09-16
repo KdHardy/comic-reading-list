@@ -6,14 +6,15 @@ import { BookThumbnail } from './BookThumbnail';
 import { NoteList } from './NoteList';
 
 interface Props {
+  entryId: number;
   book: Book;
   locations: LocationOption[];
   isFirst: boolean;
   isLast: boolean;
   onToggleComplete: (bookId: number, completed: boolean) => void;
-  onMove: (bookId: number, direction: 'up' | 'down') => void;
+  onMove: (entryId: number, direction: 'up' | 'down') => void;
   onLocationChange: (bookId: number, slot: 1 | 2 | 3, locationId: number | null) => void;
-  onRemove: (bookId: number, title: string) => void;
+  onRemove: (entryId: number, title: string) => void;
   onAddNote: (bookId: number, text: string) => void | Promise<void>;
   onUpdateNote: (noteId: number, text: string) => void | Promise<void>;
   onDeleteNote: (noteId: number) => void | Promise<void>;
@@ -24,6 +25,7 @@ interface Props {
 const LOCATION_FIELDS = ['location1_id', 'location2_id'] as const;
 
 export function BookRow({
+  entryId,
   book,
   locations,
   isFirst,
@@ -37,7 +39,7 @@ export function BookRow({
   onDeleteNote,
   onThumbnailCached,
 }: Props) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: book.book_id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: entryId });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -59,10 +61,10 @@ export function BookRow({
       />
 
       <div className="book-nav-buttons">
-        <button type="button" disabled={isFirst} onClick={() => onMove(book.book_id, 'up')} aria-label="Move up">
+        <button type="button" disabled={isFirst} onClick={() => onMove(entryId, 'up')} aria-label="Move up">
           ▲
         </button>
-        <button type="button" disabled={isLast} onClick={() => onMove(book.book_id, 'down')} aria-label="Move down">
+        <button type="button" disabled={isLast} onClick={() => onMove(entryId, 'down')} aria-label="Move down">
           ▼
         </button>
       </div>
@@ -121,7 +123,7 @@ export function BookRow({
         className="book-delete-button"
         aria-label={`Remove ${titleText} from list`}
         title="Remove from list"
-        onClick={() => onRemove(book.book_id, titleText)}
+        onClick={() => onRemove(entryId, titleText)}
       >
         🗑
       </button>

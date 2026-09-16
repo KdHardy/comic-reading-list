@@ -29,11 +29,30 @@ export interface Book {
   notes: Note[];
 }
 
-export interface ReadingOrderRow {
+interface ListEntryBase {
+  entry_id: number;
   list_id: number;
-  book_id: number;
   read_order: number;
+}
+
+export interface BookListEntry extends ListEntryBase {
+  entry_type: 'book';
+  book_id: number;
+  divider_name: null;
   book: Book;
+}
+
+export interface DividerListEntry extends ListEntryBase {
+  entry_type: 'divider';
+  book_id: null;
+  divider_name: string;
+  book: null;
+}
+
+export type ListEntry = BookListEntry | DividerListEntry;
+
+export function isBookEntry(entry: ListEntry): entry is BookListEntry {
+  return entry.entry_type === 'book';
 }
 
 export interface ReadingListSummary {
@@ -55,5 +74,10 @@ export interface ListSnapshot {
     location1_id: number | null;
     location2_id: number | null;
     location3_id: number | null;
+  }[];
+  dividers: {
+    entry_id: number;
+    divider_name: string;
+    read_order: number;
   }[];
 }

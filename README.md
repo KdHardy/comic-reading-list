@@ -45,6 +45,27 @@ The repair is idempotent and does not touch lookup seeds, books, or lists. If th
 missing rather than only absent from PostgREST's schema cache, it is recreated empty; restoring
 historical list-to-book associations requires a separate data backup.
 
+### Restoring canonical mixed entries and dividers
+
+Migration `0010_restore_list_entry_canonical.sql` makes `list_entry` the canonical source for
+ordered books and dividers while retaining `reading_order` as a compatibility mirror:
+
+1. Back up the database. Before applying, confirm there are no duplicate `book` entries for the
+   same `(list_id, book_id)` in `list_entry`; the migration aborts safely if the unique index
+   cannot be created.
+2. Run `supabase/migrations/0010_restore_list_entry_canonical.sql` in the SQL Editor. It preserves
+   existing entry IDs and dividers and backfills only books missing from `list_entry`.
+3. Run `supabase/verify_list_entry_recovery.sql`.
+4. Deploy the web build only after the migration and verification succeed. The preceding web
+   release remains compatible during this interval through the mirrored `reading_order` table.
+5. Verify a divider-heavy list and a list backfilled from `reading_order`, then exercise add,
+   rename, delete, drag reorder, and Revert on a disposable test list.
+
+For rollback, restore the previous Worker version first. Leave `list_entry` and its data in place;
+the compatibility RPCs and `reading_order` mirror support the preceding frontend. If database
+function rollback is required, restore the pre-migration definitions captured from
+`pg_get_functiondef` or the database backup rather than dropping `list_entry`.
+
 ## 2. Set up the web app
 
 ```
