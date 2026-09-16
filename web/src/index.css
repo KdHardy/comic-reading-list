@@ -216,6 +216,26 @@ input:not([type]) {
   font-weight: 600;
 }
 
+.add-divider-button {
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.add-divider-button:hover {
+  background: var(--accent-hover-bg);
+}
+
+.ordering-disabled-note {
+  display: inline-block;
+  margin: 0 0 12px 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 .list-title-edit input {
   font-size: 1.25rem;
   flex: 1;
@@ -258,6 +278,65 @@ input:not([type]) {
 
 .book-row-completed {
   opacity: 0.6;
+}
+
+.section-divider {
+  display: grid;
+  grid-template-columns: auto minmax(24px, 1fr) auto minmax(24px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--accent);
+}
+
+.section-divider-line {
+  height: 2px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.section-divider-name {
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  padding: 4px 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.section-divider-name:hover {
+  background: var(--accent-hover-bg);
+}
+
+.section-divider-edit {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.section-divider-edit input {
+  min-width: 180px;
+}
+
+.section-divider-edit button {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.divider-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1;
+  padding: 2px 4px;
+  background: var(--surface);
+  color: var(--danger);
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .book-nav-buttons {
@@ -443,6 +522,23 @@ input:not([type]) {
 
   .reading-stat:nth-child(n + 3) {
     border-top: 1px solid var(--border);
+  }
+
+  .section-divider {
+    grid-template-columns: auto 1fr auto auto;
+  }
+
+  .section-divider-line:last-of-type {
+    display: none;
+  }
+
+  .section-divider-edit {
+    flex-wrap: wrap;
+  }
+
+  .section-divider-edit input {
+    min-width: 0;
+    width: 100%;
   }
 
   .book-row {

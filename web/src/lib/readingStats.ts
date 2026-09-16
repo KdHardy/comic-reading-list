@@ -8,7 +8,7 @@ export interface ReadingStats {
 }
 
 interface ReadingStatsRow {
-  book: Pick<Book, 'completed' | 'completed_date'>;
+  book: Pick<Book, 'completed' | 'completed_date'> | null;
 }
 
 function startOfLocalDay(date: Date): Date {
@@ -29,11 +29,14 @@ export function calculateReadingStats(
   const nextWeekStart = new Date(weekStart);
   nextWeekStart.setDate(weekStart.getDate() + 7);
 
+  let total = 0;
   let completed = 0;
   let completedThisWeek = 0;
   const readingDays = new Set<string>();
 
   for (const row of rows) {
+    if (!row.book) continue;
+    total += 1;
     if (!row.book.completed) continue;
     completed += 1;
 
@@ -65,7 +68,7 @@ export function calculateReadingStats(
   }
 
   return {
-    total: rows.length,
+    total,
     completed,
     completedThisWeek,
     currentStreak,

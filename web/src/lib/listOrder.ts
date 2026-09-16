@@ -1,18 +1,15 @@
-import type { ReadingOrderRow } from './types';
+import type { ListEntry } from './types';
 
-/** Reinsert a new visible-only order into the full list, keeping completed rows fixed. */
-export function mergeVisibleOrder(
-  fullRows: ReadingOrderRow[],
-  reorderedVisibleIds: number[],
+/** Reinsert visible entry IDs while keeping hidden completed books fixed. */
+export function mergeVisibleEntryOrder(
+  fullEntries: ListEntry[],
+  reorderedVisibleEntryIds: number[],
   hideRead: boolean
 ): number[] {
-  if (!hideRead) return reorderedVisibleIds;
-
-  const fullIds = fullRows.map((row) => row.book_id);
-  const visibleSet = new Set(reorderedVisibleIds);
-  const queue = [...reorderedVisibleIds];
-
-  return fullIds.map((id) => (visibleSet.has(id) ? queue.shift()! : id));
+  // Reordering while books are hidden can move an unseen book across a section
+  // divider. Preserve the complete order until every entry is visible.
+  if (hideRead) return fullEntries.map((entry) => entry.entry_id);
+  return reorderedVisibleEntryIds;
 }
 
 export function hideReadStorageKey(listId: number): string {

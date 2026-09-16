@@ -45,6 +45,21 @@ describe('calculateReadingStats', () => {
     });
   });
 
+  it('excludes divider entries from every comic metric', () => {
+    const rows = [
+      row(true, '2024-01-10T09:00:00Z'),
+      { book: null },
+      row(false),
+    ];
+
+    expect(calculateReadingStats(rows, new Date('2024-01-10T12:00:00Z'))).toEqual({
+      total: 2,
+      completed: 1,
+      completedThisWeek: 1,
+      currentStreak: 1,
+    });
+  });
+
   it('uses local Sunday through Saturday as the current week', () => {
     const rows = [
       row(true, '2024-01-06T23:59:59'),

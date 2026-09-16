@@ -45,6 +45,28 @@ The repair is idempotent and does not touch lookup seeds, books, or lists. If th
 missing rather than only absent from PostgREST's schema cache, it is recreated empty; restoring
 historical list-to-book associations requires a separate data backup.
 
+### Restoring canonical mixed entries and dividers
+
+Migration `0010_restore_list_entry_canonical.sql` makes `list_entry` the canonical source for
+ordered books and dividers while retaining `reading_order` as a compatibility mirror:
+
+1. Back up the database. Before applying, confirm there are no duplicate `book` entries for the
+   same `(list_id, book_id)` in `list_entry`; the migration aborts safely if the unique index
+   cannot be created.
+2. Run `supabase/migrations/0010_restore_list_entry_canonical.sql` in the SQL Editor. It preserves
+   existing entry IDs and dividers, backfills only books missing from `list_entry`, and mirrors
+   canonical books into `reading_order` for rollback compatibility.
+3. Run `supabase/verify_list_entry_recovery.sql`.
+4. Deploy the web build only after the migration and verification succeed. The preceding web
+   release remains compatible during this interval through the mirrored `reading_order` table.
+5. Verify a divider-heavy list and a list backfilled from `reading_order`, then exercise add,
+   rename, delete, drag reorder, and Revert on a disposable test list.
+
+For rollback, restore the previous Worker version first. Leave `list_entry` and its data in place;
+the compatibility RPCs and `reading_order` mirror support the preceding frontend. If database
+function rollback is required, restore the pre-migration definitions captured from
+`pg_get_functiondef` or the database backup rather than dropping `list_entry`.
+
 ## 2. Set up the web app
 
 ```
@@ -132,24 +154,26 @@ See `supabase/migrations/0001_init_schema.sql` for the full definitions. Summary
 
 - `reading_list` — a list (`list_id`, `list_name`, `completed`, `created_date`, `completed_date`)
 - `book` — a comic issue, deduplicated on `(series, volume, number, publisher)`
-- `reading_order` — join table (`list_id`, `book_id`, `read_order`)
+- `list_entry` — canonical mixed list order for books and named section dividers; see
+  `0010_restore_list_entry_canonical.sql`
+- `reading_order` — temporary book-only compatibility mirror retained for rollback
 - `location` — fixed lookup table (Local, Marvel Unlimited, DC Universe Infinite, Hoopla, Comixology)
 - `note` — one or more free-text notes per book (`note_id`, `book_id`, `note_text`, `created_at`); see
   `0005_notes.sql`. Book-level rather than list-level, since a book has one canonical set of notes
   regardless of which list(s) it's on.
 - `app_secret` — single-row table holding the shared write secret; never exposed via the REST API
 
-All writes go through the RPC functions in `0002_functions.sql`/`0005_notes.sql` (`add_book_to_list`,
-`reorder_list`, `revert_list`, `add_note`, `update_note`, `delete_note`, etc.), each checking the
-shared secret before touching data. Direct table writes are blocked by the RLS policies in
-`0003_security.sql`/`0005_notes.sql` — only `SELECT` is allowed.
+All writes go through the RPC functions in the migrations (`add_book_to_list`,
+`reorder_list_entries_v2`, `create_section_divider_v2`, `revert_list_entries_v2`, `add_note`,
+etc.), each checking the shared secret before touching data. Direct table writes are blocked by
+RLS — only `SELECT` is allowed.
 
 ## Status
 
 The core app is built and deployed. See [PLAN.md](PLAN.md) for the full feature checklist.
 
-**Done:** database schema (5 migrations), web reading list page (reorder, revert, delete, notes,
-auto-refresh, list memory), browser extension (capture mode, six adapters, reliable submit),
-Cloudflare Pages deployment.
+**Done:** database schema, web reading list page (mixed book/divider ordering, stats, revert,
+delete, notes, auto-refresh, list memory), browser extension (capture mode, six adapters,
+reliable submit), Cloudflare Worker deployment, focused automated tests.
 
-**Not started / deferred:** automated tests, iPad Safari extension research, offline viewing.
+**Not started / deferred:** iPad Safari extension research, offline viewing.

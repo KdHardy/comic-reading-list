@@ -1,6 +1,13 @@
 import { supabase, WRITE_SECRET } from './supabaseClient';
 import { blobToBase64 } from './thumbnailCache';
-import type { Book, ListSnapshot, LocationOption, Note, ReadingListSummary, ReadingOrderRow } from './types';
+import {
+  type Book,
+  type ListEntry,
+  type ListSnapshot,
+  type LocationOption,
+  type Note,
+  type ReadingListSummary,
+} from './types';
 
 const BOOK_FIELDS = `
   book_id, publisher, series, volume, number, event, publish_date,
@@ -30,46 +37,35 @@ export async function fetchLocations(): Promise<LocationOption[]> {
 
 export async function fetchListDetail(
   listId: number
-): Promise<{ list: ReadingListSummary; rows: ReadingOrderRow[] }> {
-  const [{ data: list, error: listError }, { data: rows, error: rowsError }] = await Promise.all([
+): Promise<{ list: ReadingListSummary; entries: ListEntry[] }> {
+  const [{ data: list, error: listError }, { data: entries, error: entriesError }] = await Promise.all([
     supabase.from('reading_list').select('*').eq('list_id', listId).single(),
     supabase
-      .from('reading_order')
-      .select(`list_id, book_id, read_order, book:book_id(${BOOK_FIELDS}, notes:note(note_id, book_id, note_text, created_at))`)
+      .from('list_entry')
+      .select(`entry_id, list_id, entry_type, book_id, divider_name, read_order, book:book_id(${BOOK_FIELDS}, notes:note(note_id, book_id, note_text, created_at))`)
       .eq('list_id', listId)
-      .order('read_order', { ascending: true }),
+      .order('read_order', { ascending: true })
+      .order('entry_id', { ascending: true }),
   ]);
 
   if (listError) throw listError;
-  if (rowsError) throw rowsError;
+  if (entriesError) throw entriesError;
 
   return {
     list: list as ReadingListSummary,
-    // supabase-js types the embedded relation as an array; it's always a single row here.
-    rows: ((rows ?? []) as unknown as (Omit<ReadingOrderRow, 'book'> & { book: Book })[]).map((r) => ({
-      ...r,
-      book: {
-        ...r.book,
-        notes: [...(r.book.notes ?? [])].sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        ),
-      },
-    })),
-  };
-}
-
-export function snapshotFromRows(listName: string, rows: ReadingOrderRow[]): ListSnapshot {
-  return {
-    list_name: listName,
-    books: rows.map((r) => ({
-      book_id: r.book_id,
-      read_order: r.read_order,
-      completed: r.book.completed,
-      completed_date: r.book.completed_date,
-      location1_id: r.book.location1_id,
-      location2_id: r.book.location2_id,
-      location3_id: r.book.location3_id,
-    })),
+    entries: ((entries ?? []) as unknown as ListEntry[]).map((entry) =>
+      entry.entry_type === 'divider'
+        ? { ...entry, book: null }
+        : {
+            ...entry,
+            book: {
+              ...(entry.book as Book),
+              notes: [...((entry.book as Book).notes ?? [])].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              ),
+            },
+          }
+    ),
   };
 }
 
@@ -110,26 +106,50 @@ export async function setBookLocation(bookId: number, slot: 1 | 2 | 3, locationI
   if (error) throw error;
 }
 
-export async function removeBookFromList(listId: number, bookId: number): Promise<void> {
-  const { error } = await supabase.rpc('remove_book_from_list', {
+export async function deleteListEntry(listId: number, entryId: number): Promise<void> {
+  const { error } = await supabase.rpc('delete_list_entry_v2', {
     p_secret: WRITE_SECRET,
     p_list_id: listId,
-    p_book_id: bookId,
+    p_entry_id: entryId,
   });
   if (error) throw error;
 }
 
-export async function reorderList(listId: number, bookIdsInOrder: number[]): Promise<void> {
-  const { error } = await supabase.rpc('reorder_list', {
+export async function createSectionDivider(
+  listId: number,
+  dividerName: string,
+  beforeEntryId: number | null = null
+): Promise<number> {
+  const { data, error } = await supabase.rpc('create_section_divider_v2', {
     p_secret: WRITE_SECRET,
     p_list_id: listId,
-    p_book_ids: bookIdsInOrder,
+    p_divider_name: dividerName,
+    p_before_entry_id: beforeEntryId,
+  });
+  if (error) throw error;
+  return Number(data);
+}
+
+export async function updateSectionDivider(entryId: number, dividerName: string): Promise<void> {
+  const { error } = await supabase.rpc('update_section_divider_v2', {
+    p_secret: WRITE_SECRET,
+    p_divider_id: entryId,
+    p_divider_name: dividerName,
+  });
+  if (error) throw error;
+}
+
+export async function reorderListEntries(listId: number, entryIdsInOrder: number[]): Promise<void> {
+  const { error } = await supabase.rpc('reorder_list_entries_v2', {
+    p_secret: WRITE_SECRET,
+    p_list_id: listId,
+    p_entry_ids: entryIdsInOrder,
   });
   if (error) throw error;
 }
 
 export async function revertList(listId: number, snapshot: ListSnapshot): Promise<void> {
-  const { error } = await supabase.rpc('revert_list', {
+  const { error } = await supabase.rpc('revert_list_entries_v2', {
     p_secret: WRITE_SECRET,
     p_list_id: listId,
     p_snapshot: snapshot,
