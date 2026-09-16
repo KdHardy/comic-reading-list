@@ -105,6 +105,10 @@ erDiagram
 - [x] Location 1 and Location 2 dropdowns (from `location` table)
 - [x] Location 3 data field kept in DB but hidden from UI
 - [x] Per-book notes: scrollable list, `+` to add, click-to-edit, URL linkify, Ctrl+Enter to save
+- [x] Section dividers: hover insertion line + right-edge "+" above each comic, default name
+      `Publisher + Date` of the comic below (immutable once assigned — never recomputed on
+      move), title-style inline edit/clear/complete controls, matching drag/delete icons, and
+      "Hide read" visibility limited to dividers with a visible unread comic on both sides
 - [x] Delete button per row (`remove_book_from_list`)
 - [x] Revert button (snapshot taken at page load, restores via `revert_list` RPC)
 - [x] Autosave on every interaction (complete, reorder, location, title, notes)
