@@ -30,24 +30,32 @@ Before requesting a deployment:
    /deploy
    ```
 
-Only a repository owner, maintainer, or collaborator with write permission can issue the command.
-The pull request must come from this repository, not a fork. Requests are serialized so only one
-production merge is evaluated at a time.
+The command may come from either:
+
+- a repository owner, organization member, or collaborator whose current repository permission is
+  `write`, `maintain`, or `admin`; or
+- the genuine Cursor GitHub App acting as `cursor[bot]`, such as a coordinator-posted deploy signal.
+
+Cursor authorization requires GitHub's `performed_via_github_app` provenance plus the immutable
+GitHub IDs for both the bot account and Cursor App. A matching display name or bot login is not
+enough. The pull request must use a `cursor/*` branch in this repository, not a fork. Requests are
+serialized so only one production merge is evaluated at a time.
 
 The gate pins the pull request head commit, verifies the trusted commenter's current repository
 permission, requires the named GitHub Actions check to succeed, and verifies the head and base
 commits again immediately before merging. Any new commit or intervening `master` change stops the
 deployment; update the branch and post `/deploy` again.
 
-Pull requests that change anything under `.github/workflows/` cannot approve themselves and must be
-merged manually by a repository administrator. This includes the pull request that first installs
-this automation.
+Pull requests that change anything under `.github/workflows/` or `.github/deploy/` cannot approve
+themselves and must be merged manually by a repository administrator. This includes changes to the
+authorization policy and its regression tests.
 
 ## Security model
 
-The deploy gate runs from the workflow already on `master` in response to `issue_comment`. It never
-checks out, imports, or executes pull request code. It deliberately does not use
-`pull_request_target`, which avoids running untrusted code with a write-capable token.
+The deploy gate runs from the workflow already on `master` in response to `issue_comment`. It checks
+out only the immutable `master` revision that triggered the run and never imports or executes pull
+request code. It deliberately does not use `pull_request_target`, which avoids running untrusted
+code with a write-capable token.
 
 The CI workflow has only read access to repository contents. The deploy workflow has only the
 permissions needed to read checks, validate the pull request, post an audit comment, and merge.
