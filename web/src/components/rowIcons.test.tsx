@@ -64,10 +64,7 @@ describe('divider rows use the same drag/delete affordances as book rows', () =>
     render(
       <DividerRow
         entry={dividerEntry}
-        isFirst={false}
-        isLast={false}
         orderingDisabled={false}
-        onMove={vi.fn()}
         onSave={vi.fn().mockResolvedValue(undefined)}
         onDelete={vi.fn()}
       />

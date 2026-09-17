@@ -32,21 +32,42 @@ describe('DividerInsertZone — hover insertion line with right-edge plus', () =
     expect(onInsert).toHaveBeenCalledTimes(2);
   });
 
-  it('disables the button and swaps the tooltip when insertion is unavailable (hide-read active)', async () => {
+  it('remains usable while hide-read is active (insertion is no longer blocked)', async () => {
+    const user = userEvent.setup();
+    const onInsert = vi.fn();
+    // Hide-read used to disable this control; insert must stay enabled so the
+    // visible unread comic can be the before-target in the full list.
+    render(
+      <DividerInsertZone
+        label="Insert section divider above Batman #1"
+        disabled={false}
+        onInsert={onInsert}
+      />
+    );
+
+    const button = screen.getByRole('button', { name: 'Insert section divider above Batman #1' });
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('title', 'Insert section divider here');
+
+    await user.click(button);
+    expect(onInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the button and swaps the tooltip when insertion is explicitly unavailable', async () => {
     const user = userEvent.setup();
     const onInsert = vi.fn();
     render(
       <DividerInsertZone
         label="Insert section divider above Batman #1"
         disabled
-        disabledReason="Show read comics to insert dividers"
+        disabledReason="Insert unavailable"
         onInsert={onInsert}
       />
     );
 
     const button = screen.getByRole('button', { name: 'Insert section divider above Batman #1' });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', 'Show read comics to insert dividers');
+    expect(button).toHaveAttribute('title', 'Insert unavailable');
 
     await user.click(button);
     expect(onInsert).not.toHaveBeenCalled();

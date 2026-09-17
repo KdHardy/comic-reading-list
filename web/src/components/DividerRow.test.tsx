@@ -18,22 +18,18 @@ function makeEntry(overrides: Partial<DividerListEntry> = {}): DividerListEntry 
 }
 
 function renderDivider(overrides: Partial<DividerListEntry> = {}, props: Partial<Parameters<typeof DividerRow>[0]> = {}) {
-  const onMove = vi.fn();
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onDelete = vi.fn();
-  render(
+  const { container } = render(
     <DividerRow
       entry={makeEntry(overrides)}
-      isFirst={false}
-      isLast={false}
       orderingDisabled={false}
-      onMove={onMove}
       onSave={onSave}
       onDelete={onDelete}
       {...props}
     />
   );
-  return { onMove, onSave, onDelete };
+  return { onSave, onDelete, container };
 }
 
 describe('DividerRow — title-style inline edit controls', () => {
@@ -106,25 +102,31 @@ describe('DividerRow — title-style inline edit controls', () => {
   });
 });
 
-describe('DividerRow — drag and delete controls match the book row pattern', () => {
-  it('exposes a drag handle using the shared drag-handle icon/class and delete button using the shared icon/class', () => {
+describe('DividerRow — slim one-line controls without touch arrows', () => {
+  it('does not render the left-edge up/down touch arrows', () => {
     renderDivider();
 
-    const dragHandle = screen.getByRole('button', { name: 'Drag to reorder' });
-    expect(dragHandle).toHaveClass('drag-handle');
-    expect(dragHandle).toHaveTextContent('☰');
-
-    const deleteButton = screen.getByRole('button', { name: 'Remove divider "Marvel + Jun 02, 2021" from list' });
-    expect(deleteButton).toHaveClass('book-delete-button');
-    expect(deleteButton).toHaveTextContent('🗑');
+    expect(screen.queryByRole('button', { name: 'Move divider up' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move divider down' })).not.toBeInTheDocument();
+    expect(document.querySelector('.book-nav-buttons')).not.toBeInTheDocument();
   });
 
-  it('disables the drag handle and move buttons while ordering is disabled', () => {
+  it('keeps name/edit, drag, and delete controls on the slim divider row', () => {
+    const { container } = renderDivider();
+
+    expect(container.querySelector('.section-divider')).toBeInTheDocument();
+    expect(container.querySelectorAll('.section-divider-line')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Edit divider Marvel + Jun 02, 2021' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Drag to reorder' })).toHaveClass('drag-handle');
+    expect(screen.getByRole('button', { name: 'Remove divider "Marvel + Jun 02, 2021" from list' })).toHaveClass(
+      'book-delete-button'
+    );
+  });
+
+  it('disables the drag handle while ordering is disabled', () => {
     renderDivider({}, { orderingDisabled: true });
 
     expect(screen.getByRole('button', { name: 'Drag to reorder' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move divider up' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move divider down' })).toBeDisabled();
   });
 
   it('calls onDelete with the entry id and current name when the delete button is clicked', async () => {
@@ -134,15 +136,5 @@ describe('DividerRow — drag and delete controls match the book row pattern', (
     await user.click(screen.getByRole('button', { name: 'Remove divider "Marvel + Jun 02, 2021" from list' }));
 
     expect(onDelete).toHaveBeenCalledWith(42, 'Marvel + Jun 02, 2021');
-  });
-
-  it('calls onMove with the correct direction, and respects isFirst/isLast boundaries', async () => {
-    const user = userEvent.setup();
-    const { onMove } = renderDivider({}, { isFirst: true, isLast: false });
-
-    expect(screen.getByRole('button', { name: 'Move divider up' })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Move divider down' }));
-
-    expect(onMove).toHaveBeenCalledWith(42, 'down');
   });
 });
