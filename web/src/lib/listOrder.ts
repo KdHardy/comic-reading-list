@@ -1,16 +1,69 @@
 import { arrayMove } from '@dnd-kit/sortable';
 import type { ListEntry } from './types';
 
-/** Reinsert visible entry IDs while keeping hidden completed books fixed. */
+/**
+ * Reinsert a visible-only order into the full list while hide-read is on.
+ *
+ * Hidden (completed) books stay anchored to the nearest preceding *visible
+ * book* — never to a divider. That way, when a divider is placed immediately
+ * before a visible unread item in the UI, it is also immediately before that
+ * item in the persisted full order (no hidden reads between them).
+ *
+ * Hidden dividers (filtered out by hide-read visibility rules) are treated
+ * like other hidden entries and keep their relative place in those packs.
+ */
 export function mergeVisibleEntryOrder(
   fullEntries: ListEntry[],
   reorderedVisibleEntryIds: number[],
   hideRead: boolean
 ): number[] {
-  // Reordering while books are hidden can move an unseen book across a section
-  // divider. Preserve the complete order until every entry is visible.
-  if (hideRead) return fullEntries.map((entry) => entry.entry_id);
-  return reorderedVisibleEntryIds;
+  if (!hideRead) return reorderedVisibleEntryIds;
+
+  const byId = new Map(fullEntries.map((entry) => [entry.entry_id, entry]));
+  const visibleSet = new Set(reorderedVisibleEntryIds);
+
+  const leadingHidden: number[] = [];
+  const trailingHiddenByBook = new Map<number, number[]>();
+  let anchorBookId: number | null = null;
+
+  for (const entry of fullEntries) {
+    if (visibleSet.has(entry.entry_id)) {
+      if (entry.entry_type === 'book') {
+        anchorBookId = entry.entry_id;
+        if (!trailingHiddenByBook.has(anchorBookId)) {
+          trailingHiddenByBook.set(anchorBookId, []);
+        }
+      }
+      continue;
+    }
+
+    if (anchorBookId == null) {
+      leadingHidden.push(entry.entry_id);
+    } else {
+      trailingHiddenByBook.get(anchorBookId)!.push(entry.entry_id);
+    }
+  }
+
+  const result: number[] = [...leadingHidden];
+  for (const id of reorderedVisibleEntryIds) {
+    result.push(id);
+    const entry = byId.get(id);
+    if (entry?.entry_type === 'book') {
+      result.push(...(trailingHiddenByBook.get(id) ?? []));
+    }
+  }
+  return result;
+}
+
+/**
+ * Under hide-read, a hover-insert above a visible unread comic must pass that
+ * comic's entry_id as `p_before_entry_id` so the new divider lands immediately
+ * before it in the full list (hidden reads above the comic stay above the
+ * divider). The visible book id is already the correct before-target; this
+ * helper exists so tests lock the mapping in one place.
+ */
+export function resolveDividerInsertBeforeEntryId(visibleBookEntryId: number): number {
+  return visibleBookEntryId;
 }
 
 /**

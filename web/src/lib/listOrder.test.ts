@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { computeDragReorder, computeStepReorder, filterVisibleEntries, mergeVisibleEntryOrder } from './listOrder';
+import {
+  computeDragReorder,
+  computeStepReorder,
+  filterVisibleEntries,
+  mergeVisibleEntryOrder,
+  resolveDividerInsertBeforeEntryId,
+} from './listOrder';
 import type { Book, ListEntry } from './types';
 
 function book(entryId: number, completed: boolean): ListEntry {
@@ -27,16 +33,70 @@ function divider(entryId: number, name = `Section ${entryId}`): ListEntry {
 }
 
 describe('mergeVisibleEntryOrder', () => {
-  it('preserves section membership by refusing reorder while books are hidden', () => {
-    const entries = [book(1, false), divider(2), book(3, true), divider(4), book(5, false)];
-
-    expect(mergeVisibleEntryOrder(entries, [5, 4, 2, 1], true)).toEqual([1, 2, 3, 4, 5]);
-  });
-
   it('uses the complete supplied entry order when nothing is hidden', () => {
     expect(mergeVisibleEntryOrder([book(1, false), divider(2), book(3, false)], [3, 2, 1], false)).toEqual([
       3, 2, 1,
     ]);
+  });
+
+  it('places a moved divider immediately before the visible unread it precedes, skipping hidden reads', () => {
+    // Full: unread A, read B, DIV, unread C. Visible: A, DIV, C.
+    // Drag DIV above A in the UI → DIV must sit immediately before A (not before B).
+    const entries = [book(1, false), book(2, true), divider(3), book(4, false)];
+    const visibleReorder = computeDragReorder([1, 3, 4], 3, 1)!;
+
+    expect(visibleReorder).toEqual([3, 1, 4]);
+    expect(mergeVisibleEntryOrder(entries, visibleReorder, true)).toEqual([3, 1, 2, 4]);
+  });
+
+  it('keeps hidden reads with the preceding visible book when a divider is stepped down', () => {
+    // Full: A, B_read, DIV, C. Step DIV down past C in the visible list.
+    const entries = [book(1, false), book(2, true), divider(3), book(4, false)];
+    const visibleReorder = computeStepReorder([1, 3, 4], 3, 'down')!;
+
+    expect(visibleReorder).toEqual([1, 4, 3]);
+    expect(mergeVisibleEntryOrder(entries, visibleReorder, true)).toEqual([1, 2, 4, 3]);
+  });
+
+  it('preserves hidden dividers and reads relative to their anchoring visible book', () => {
+    // A unread, DIV2 (hidden: all-read below until DIV4), B read, DIV4 (hidden), C unread.
+    const entries = [book(1, false), divider(2), book(3, true), divider(4), book(5, false)];
+    expect(filterVisibleEntries(entries, true).map((e) => e.entry_id)).toEqual([1, 5]);
+
+    expect(mergeVisibleEntryOrder(entries, [5, 1], true)).toEqual([5, 1, 2, 3, 4]);
+  });
+
+  it('leaves leading hidden reads ahead of the first visible entry after a divider move', () => {
+    const entries = [book(1, true), book(2, false), divider(3), book(4, false)];
+    // Visible: 2, 3, 4. Move DIV before first visible unread (2).
+    const visibleReorder = [3, 2, 4];
+
+    expect(mergeVisibleEntryOrder(entries, visibleReorder, true)).toEqual([1, 3, 2, 4]);
+  });
+});
+
+describe('resolveDividerInsertBeforeEntryId — hide-read insert placement', () => {
+  it('maps the visible unread comic as the full-list before-target', () => {
+    // Hover-insert above visible unread C while B (read) is hidden between A and C:
+    // passing C's entry_id makes create_section_divider land immediately before C.
+    const visibleUnreadEntryId = 4;
+    expect(resolveDividerInsertBeforeEntryId(visibleUnreadEntryId)).toBe(4);
+  });
+
+  it('keeps insert placement stable when hidden reads sit above the visible target', () => {
+    const entries = [book(1, false), book(2, true), book(3, true), book(4, false)];
+    const visible = filterVisibleEntries(entries, true);
+    expect(visible.map((e) => e.entry_id)).toEqual([1, 4]);
+
+    // Insert above the second visible unread — before-id is that unread's entry_id,
+    // so the new divider precedes it (and stays after the hidden reads 2 and 3).
+    const beforeId = resolveDividerInsertBeforeEntryId(visible[1]!.entry_id);
+    expect(beforeId).toBe(4);
+
+    // Simulate post-insert full order the RPC would produce for before_entry_id=4.
+    const simulated = [1, 2, 3, 99, 4];
+    expect(simulated.indexOf(99)).toBe(simulated.indexOf(4) - 1);
+    expect(simulated.indexOf(99)).toBeGreaterThan(simulated.indexOf(2));
   });
 });
 

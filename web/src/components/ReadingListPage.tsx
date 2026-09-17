@@ -32,6 +32,7 @@ import {
   filterVisibleEntries,
   mergeVisibleEntryOrder,
   readHideReadPreference,
+  resolveDividerInsertBeforeEntryId,
   writeHideReadPreference,
 } from '../lib/listOrder';
 import { snapshotFromEntries } from '../lib/listSnapshot';
@@ -125,7 +126,6 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     () => visibleEntries.map((entry) => entry.entry_id),
     [visibleEntries]
   );
-  const orderingDisabled = hideRead;
 
   function handleHideReadChange(checked: boolean) {
     setHideRead(checked);
@@ -193,14 +193,12 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   function handleMove(entryId: number, direction: 'up' | 'down') {
-    if (orderingDisabled) return;
     const reordered = computeStepReorder(visibleEntryIds, entryId, direction);
     if (!reordered) return;
     persistOrder(reordered);
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    if (orderingDisabled) return;
     const { active, over } = event;
     if (!over) return;
     const reordered = computeDragReorder(visibleEntryIds, Number(active.id), Number(over.id));
@@ -221,10 +219,12 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function handleInsertDivider(beforeEntryId: number, belowBook: Book) {
-    if (orderingDisabled) return;
     const name = defaultDividerName(belowBook);
+    // Under hide-read, beforeEntryId is the visible unread comic the divider
+    // should precede — that maps 1:1 to the full-list insert target.
+    const insertBeforeId = resolveDividerInsertBeforeEntryId(beforeEntryId);
     try {
-      await createSectionDivider(listId, name, beforeEntryId);
+      await createSectionDivider(listId, name, insertBeforeId);
       await load({ silent: true });
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to add divider.');
@@ -344,10 +344,6 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
 
       <ReadingStats stats={readingStats} />
 
-      {orderingDisabled && (
-        <span className="ordering-disabled-note">Show read comics to reorder or insert dividers.</span>
-      )}
-
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleEntryIds} strategy={verticalListSortingStrategy}>
           <div className="book-list">
@@ -356,8 +352,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                 {entry.entry_type === 'book' && (
                   <DividerInsertZone
                     label={`Insert section divider above ${entry.book.series}`}
-                    disabled={orderingDisabled}
-                    disabledReason="Show read comics to insert dividers"
+                    disabled={false}
                     onInsert={() => void handleInsertDivider(entry.entry_id, entry.book)}
                   />
                 )}
@@ -369,7 +364,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                     locations={locations}
                     isFirst={idx === 0}
                     isLast={idx === visibleEntries.length - 1}
-                    orderingDisabled={orderingDisabled}
+                    orderingDisabled={false}
                     onToggleComplete={handleToggleComplete}
                     onMove={handleMove}
                     onLocationChange={handleLocationChange}
@@ -383,10 +378,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                   <DividerRow
                     key={entry.entry_id}
                     entry={entry}
-                    isFirst={idx === 0}
-                    isLast={idx === visibleEntries.length - 1}
-                    orderingDisabled={orderingDisabled}
-                    onMove={handleMove}
+                    orderingDisabled={false}
                     onSave={handleUpdateDivider}
                     onDelete={handleRemove}
                   />
