@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { describe, it } = require('node:test');
 const {
   CURSOR_APP,
@@ -103,5 +105,21 @@ describe('guarded deploy identity policy', () => {
       comment.body = body;
       assert.equal(isTrustedDeploySignal(comment), false);
     }
+  });
+});
+
+describe('guarded deploy workflow token scopes', () => {
+  it('keeps pull-requests write so PR comments and merges succeed', () => {
+    const workflow = fs.readFileSync(
+      path.join(__dirname, '../workflows/guarded-deploy.yml'),
+      'utf8'
+    );
+    const permissions = workflow.match(/^permissions:\n((?:  .+\n)+)/m)?.[1] ?? '';
+
+    assert.match(permissions, /^  checks: read$/m);
+    assert.match(permissions, /^  contents: write$/m);
+    assert.match(permissions, /^  issues: write$/m);
+    assert.match(permissions, /^  pull-requests: write$/m);
+    assert.doesNotMatch(permissions, /pull-requests:\s*read/);
   });
 });
