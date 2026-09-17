@@ -57,9 +57,11 @@ out only the immutable `master` revision that triggered the run and never import
 request code. It deliberately does not use `pull_request_target`, which avoids running untrusted
 code with a write-capable token.
 
-The CI workflow has only read access to repository contents. The deploy workflow has only the
-permissions needed to read checks, validate the pull request, post an audit comment, and merge.
-Workflow actions are pinned to immutable commit SHAs.
+The CI workflow has only read access to repository contents. The deploy workflow declares the
+least-privilege token scopes required for its job: `checks: read`, `contents: write`,
+`issues: write`, and `pull-requests: write`. GitHub requires both Issues and Pull Requests write
+to post comments on a pull request and to merge it; narrowing `pull-requests` to read breaks those
+steps with HTTP 403. Workflow actions are pinned to immutable commit SHAs.
 
 There is currently no dedicated deployment label, so comments are the deployment signal. Generic
 labels such as `enhancement` or `documentation` must never trigger a deployment.

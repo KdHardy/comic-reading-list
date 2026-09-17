@@ -9,7 +9,7 @@ permissions:
   checks: read
   contents: write
   issues: write
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: production-deploy
