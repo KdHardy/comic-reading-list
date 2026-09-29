@@ -36,6 +36,7 @@ import {
   writeHideReadPreference,
 } from '../lib/listOrder';
 import { snapshotFromEntries } from '../lib/listSnapshot';
+import { calculateCurrentDateGap } from '../lib/currentDateGap';
 import { calculateReadingStats } from '../lib/readingStats';
 import { isBookEntry, type Book, type ListEntry, type ListSnapshot, type LocationOption } from '../lib/types';
 import { EditableTitle } from './EditableTitle';
@@ -121,6 +122,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
 
   const visibleEntries = useMemo(() => filterVisibleEntries(entries, hideRead), [entries, hideRead]);
   const readingStats = useMemo(() => calculateReadingStats(entries), [entries]);
+  const currentDateGap = useMemo(() => calculateCurrentDateGap(entries), [entries]);
 
   const visibleEntryIds = useMemo(
     () => visibleEntries.map((entry) => entry.entry_id),
@@ -342,7 +344,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
         <HideReadToggle checked={hideRead} onChange={handleHideReadChange} />
       </div>
 
-      <ReadingStats stats={readingStats} />
+      <ReadingStats stats={readingStats} currentDateGap={currentDateGap} />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleEntryIds} strategy={verticalListSortingStrategy}>

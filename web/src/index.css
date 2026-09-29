@@ -191,7 +191,7 @@ input:not([type]) {
 
 .reading-stats-list {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   margin: 0;
 }
 
@@ -536,8 +536,12 @@ input:not([type]) {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .reading-stat:nth-child(3) {
+  .reading-stat:nth-child(odd) {
     border-left: 0;
+  }
+
+  .reading-stat:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 
   .reading-stat:nth-child(n + 3) {
