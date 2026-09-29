@@ -6,11 +6,11 @@ const stats = { total: 5, completed: 2, completedThisWeek: 1, currentStreak: 1 }
 
 describe('ReadingStats', () => {
   it('shows the current date gap as the right-most metric', () => {
-    render(<ReadingStats stats={stats} currentDateGap={{ months: 3, days: 12 }} />);
+    render(<ReadingStats stats={stats} currentDateGap={{ months: 15, days: 12 }} />);
 
     const labels = screen.getAllByRole('term').map((term) => term.textContent);
     expect(labels[labels.length - 1]).toBe('Current date gap');
-    expect(screen.getByText('3 mo, 12 d')).toBeInTheDocument();
+    expect(screen.getByText('1 yr, 3 mo')).toBeInTheDocument();
   });
 
   it('shows a placeholder when there is no current date gap', () => {
