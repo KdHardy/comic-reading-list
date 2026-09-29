@@ -129,9 +129,18 @@ describe('calculateCurrentDateGap', () => {
 });
 
 describe('formatDateGap', () => {
-  it('formats months and days', () => {
-    expect(formatDateGap({ months: 3, days: 12 })).toBe('3 mo, 12 d');
-    expect(formatDateGap({ months: 0, days: 0 })).toBe('0 mo, 0 d');
+  it('formats years and months', () => {
+    expect(formatDateGap({ months: 15, days: 0 })).toBe('1 yr, 3 mo');
+    expect(formatDateGap({ months: 24, days: 0 })).toBe('2 yr, 0 mo');
+    expect(formatDateGap({ months: 0, days: 0 })).toBe('0 yr, 0 mo');
+  });
+
+  it('rounds leftover days to the nearest month without showing them', () => {
+    expect(formatDateGap({ months: 3, days: 14 })).toBe('0 yr, 3 mo');
+    expect(formatDateGap({ months: 3, days: 15 })).toBe('0 yr, 4 mo');
+    expect(formatDateGap({ months: 0, days: 20 })).toBe('0 yr, 1 mo');
+    // Rounding up can carry into the next year.
+    expect(formatDateGap({ months: 11, days: 29 })).toBe('1 yr, 0 mo');
   });
 
   it('renders a placeholder when there is no gap to show', () => {

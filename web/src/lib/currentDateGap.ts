@@ -131,8 +131,17 @@ export function calculateCurrentDateGap(
   return calendarGap(averageDate, localCalendarDate(now));
 }
 
-/** Display a gap as "3 mo, 12 d"; `null` renders as an em dash placeholder. */
+/** Leftover days at or above this round the gap up to the next whole month. */
+const ROUND_UP_DAYS = 15;
+
+/**
+ * Display a gap as "1 yr, 3 mo". Days are not shown but round to the nearest
+ * month (15+ days rounds up); `null` renders as an em dash placeholder.
+ */
 export function formatDateGap(gap: DateGap | null): string {
   if (!gap) return '—';
-  return `${gap.months} mo, ${gap.days} d`;
+  const totalMonths = gap.months + (gap.days >= ROUND_UP_DAYS ? 1 : 0);
+  const years = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+  return `${years} yr, ${months} mo`;
 }
