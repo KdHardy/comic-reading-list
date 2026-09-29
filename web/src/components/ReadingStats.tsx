@@ -1,15 +1,18 @@
+import { formatDateGap, type DateGap } from '../lib/currentDateGap';
 import type { ReadingStats as ReadingStatsValues } from '../lib/readingStats';
 
 interface Props {
   stats: ReadingStatsValues;
+  currentDateGap: DateGap | null;
 }
 
-export function ReadingStats({ stats }: Props) {
+export function ReadingStats({ stats, currentDateGap }: Props) {
   const metrics = [
     { label: 'Total comics', value: stats.total },
     { label: 'Comics read', value: stats.completed },
     { label: 'Read this week', value: stats.completedThisWeek },
     { label: 'Current streak', value: stats.currentStreak },
+    { label: 'Current date gap', value: formatDateGap(currentDateGap) },
   ];
 
   return (
