@@ -20,6 +20,9 @@ interface CalendarDate {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/** Dates further than this from the segment's median are ignored as outliers. */
+const OUTLIER_WINDOW_MONTHS = 6;
+
 /** Parse a stored `date` column value ("YYYY-MM-DD", optionally with a time suffix). */
 function parseCalendarDate(value: string | null): CalendarDate | null {
   if (!value) return null;
@@ -64,6 +67,13 @@ function addMonths(date: CalendarDate, months: number): CalendarDate {
   return { year, month, day: Math.min(date.day, daysInMonth(year, month)) };
 }
 
+/** Median of whole days; an even count uses the rounded midpoint of the two middle values. */
+function medianEpochDay(epochDays: readonly number[]): number {
+  const sorted = [...epochDays].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
 /** Absolute calendar distance: whole calendar months first, then the remaining days. */
 function calendarGap(a: CalendarDate, b: CalendarDate): DateGap {
   const [start, end] = toEpochDay(a) <= toEpochDay(b) ? [a, b] : [b, a];
@@ -85,7 +95,8 @@ function calendarGap(a: CalendarDate, b: CalendarDate): DateGap {
  *   Completed comics inside that range are skipped.
  * - The segment's reference date is the mean of its comics' publish dates,
  *   averaged as whole days and rounded to the nearest day. Comics without a
- *   valid date are excluded.
+ *   valid date are excluded, as are outliers dated more than six calendar
+ *   months before or after the segment's median date.
  * - The gap is the absolute calendar distance between that average date and
  *   today's local calendar date (`now` is injectable for tests).
  *
@@ -99,20 +110,24 @@ export function calculateCurrentDateGap(
   const firstUnreadIndex = rows.findIndex((row) => row.book !== null && !row.book.completed);
   if (firstUnreadIndex === -1) return null;
 
-  let totalEpochDays = 0;
-  let datedCount = 0;
+  const epochDays: number[] = [];
   for (let i = firstUnreadIndex; i < rows.length; i += 1) {
     const book = rows[i].book;
     if (book === null) break;
     if (book.completed) continue;
     const date = parseCalendarDate(book.publish_date);
-    if (!date) continue;
-    totalEpochDays += toEpochDay(date);
-    datedCount += 1;
+    if (date) epochDays.push(toEpochDay(date));
   }
-  if (datedCount === 0) return null;
+  if (epochDays.length === 0) return null;
 
-  const averageDate = fromEpochDay(Math.round(totalEpochDays / datedCount));
+  const base = fromEpochDay(medianEpochDay(epochDays));
+  const earliest = toEpochDay(addMonths(base, -OUTLIER_WINDOW_MONTHS));
+  const latest = toEpochDay(addMonths(base, OUTLIER_WINDOW_MONTHS));
+  // The median always falls inside its own window, so at least one date survives.
+  const kept = epochDays.filter((day) => day >= earliest && day <= latest);
+
+  const total = kept.reduce((sum, day) => sum + day, 0);
+  const averageDate = fromEpochDay(Math.round(total / kept.length));
   return calendarGap(averageDate, localCalendarDate(now));
 }
 

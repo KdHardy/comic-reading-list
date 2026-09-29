@@ -103,6 +103,29 @@ describe('calculateCurrentDateGap', () => {
 
     expect(calculateCurrentDateGap(rows, localDay(2024, 2, 16))).toEqual({ months: 1, days: 0 });
   });
+
+  it('ignores outliers more than six months from the segment median', () => {
+    const rows = [
+      comic('1990-05-01'),
+      comic('2024-01-01'),
+      comic('2024-01-16'),
+      comic('2024-01-31'),
+      comic('2031-01-01'),
+    ];
+
+    // Median is Jan 16, 2024; the 1990 and 2031 dates are dropped, leaving an average of Jan 16.
+    expect(calculateCurrentDateGap(rows, localDay(2024, 4, 28))).toEqual({ months: 3, days: 12 });
+  });
+
+  it('keeps dates exactly six months from the median and drops dates beyond it', () => {
+    const atEdge = [comic('2023-07-15'), comic('2024-01-15'), comic('2024-07-15')];
+    const pastEdge = [comic('2023-07-14'), comic('2024-01-15'), comic('2024-07-15')];
+
+    // All three are kept: offsets of -184, 0 and +182 days average to Jan 14.
+    expect(calculateCurrentDateGap(atEdge, localDay(2024, 1, 14))).toEqual({ months: 0, days: 0 });
+    // Jul 14 falls a day outside the window; the average of Jan 15 and Jul 15 is Apr 15.
+    expect(calculateCurrentDateGap(pastEdge, localDay(2024, 4, 15))).toEqual({ months: 0, days: 0 });
+  });
 });
 
 describe('formatDateGap', () => {
