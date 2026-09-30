@@ -18,4 +18,29 @@ describe('ReadingStats', () => {
 
     expect(screen.getByText('—')).toBeInTheDocument();
   });
+
+  it('shows collection records under their matching metrics', () => {
+    render(
+      <ReadingStats
+        stats={stats}
+        currentDateGap={null}
+        historicStats={{ longestList: 42, bestWeek: 9, longestStreak: 14 }}
+      />
+    );
+
+    const detailFor = (label: string) =>
+      screen.getByText(label).parentElement?.querySelector('.reading-stat-detail')?.textContent;
+    expect(detailFor('Total comics')).toBe('Longest list: 42');
+    expect(detailFor('Read this week')).toBe('Best week: 9');
+    expect(detailFor('Current streak')).toBe('Longest streak: 14');
+    expect(detailFor('Comics read')).toBeUndefined();
+  });
+
+  it('shows placeholders while the collection records are loading', () => {
+    render(<ReadingStats stats={stats} currentDateGap={null} historicStats={null} />);
+
+    expect(screen.getByText('Longest list: —')).toBeInTheDocument();
+    expect(screen.getByText('Best week: —')).toBeInTheDocument();
+    expect(screen.getByText('Longest streak: —')).toBeInTheDocument();
+  });
 });

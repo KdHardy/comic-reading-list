@@ -11,11 +11,17 @@ interface ReadingStatsRow {
   book: Pick<Book, 'completed' | 'completed_date'> | null;
 }
 
-function startOfLocalDay(date: Date): Date {
+export function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function localDayKey(date: Date): string {
+export function startOfLocalWeek(date: Date): Date {
+  const weekStart = startOfLocalDay(date);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  return weekStart;
+}
+
+export function localDayKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
@@ -24,8 +30,7 @@ export function calculateReadingStats(
   now: Date = new Date()
 ): ReadingStats {
   const today = startOfLocalDay(now);
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - today.getDay());
+  const weekStart = startOfLocalWeek(today);
   const nextWeekStart = new Date(weekStart);
   nextWeekStart.setDate(weekStart.getDate() + 7);
 

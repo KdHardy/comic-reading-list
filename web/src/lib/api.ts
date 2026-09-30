@@ -25,6 +25,56 @@ export async function fetchLists(): Promise<ReadingListSummary[]> {
   return data ?? [];
 }
 
+const PAGE_SIZE = 1000;
+
+// Supabase caps each response at 1000 rows, so page through collection-wide reads.
+async function fetchAllPages<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE_SIZE) return rows;
+  }
+}
+
+export async function fetchHistoricReadingData(): Promise<{
+  listBookCounts: number[];
+  completedDates: string[];
+}> {
+  const [bookEntries, completedBooks] = await Promise.all([
+    fetchAllPages<{ list_id: number }>((from, to) =>
+      supabase
+        .from('list_entry')
+        .select('list_id')
+        .eq('entry_type', 'book')
+        .order('entry_id', { ascending: true })
+        .range(from, to)
+    ),
+    fetchAllPages<{ completed_date: string }>((from, to) =>
+      supabase
+        .from('book')
+        .select('completed_date')
+        .eq('completed', true)
+        .not('completed_date', 'is', null)
+        .order('book_id', { ascending: true })
+        .range(from, to)
+    ),
+  ]);
+
+  const countsByList = new Map<number, number>();
+  for (const { list_id } of bookEntries) {
+    countsByList.set(list_id, (countsByList.get(list_id) ?? 0) + 1);
+  }
+
+  return {
+    listBookCounts: [...countsByList.values()],
+    completedDates: completedBooks.map((book) => book.completed_date),
+  };
+}
+
 export async function fetchLocations(): Promise<LocationOption[]> {
   const { data, error } = await supabase
     .from('location')
