@@ -216,6 +216,12 @@ input:not([type]) {
   font-weight: 600;
 }
 
+.reading-stat .reading-stat-detail {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
 .list-title-edit input {
   font-size: 1.25rem;
   flex: 1;

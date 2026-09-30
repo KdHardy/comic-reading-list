@@ -15,6 +15,7 @@ import {
   createSectionDivider,
   deleteListEntry,
   deleteNote,
+  fetchHistoricReadingData,
   fetchListDetail,
   fetchLocations,
   revertList,
@@ -37,6 +38,7 @@ import {
 } from '../lib/listOrder';
 import { snapshotFromEntries } from '../lib/listSnapshot';
 import { calculateCurrentDateGap } from '../lib/currentDateGap';
+import { calculateHistoricReadingStats, type HistoricReadingStats } from '../lib/historicReadingStats';
 import { calculateReadingStats } from '../lib/readingStats';
 import { isBookEntry, type Book, type ListEntry, type ListSnapshot, type LocationOption } from '../lib/types';
 import { EditableTitle } from './EditableTitle';
@@ -56,6 +58,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   const [entries, setEntries] = useState<ListEntry[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [snapshot, setSnapshot] = useState<ListSnapshot | null>(null);
+  const [historicStats, setHistoricStats] = useState<HistoricReadingStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reverting, setReverting] = useState(false);
@@ -75,6 +78,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     const silent = options?.silent ?? false;
     if (!silent) setLoading(true);
     setError(null);
+    loadHistoricStats();
     try {
       const [{ list, entries: fetchedEntries }, locs] = await Promise.all([fetchListDetail(listId), fetchLocations()]);
       setListName(list.list_name);
@@ -89,6 +93,17 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
       }
     } finally {
       if (!silent) setLoading(false);
+    }
+  }
+
+  // Collection-wide records are optional extras; a failure keeps the last values rather than
+  // breaking the page.
+  async function loadHistoricStats() {
+    try {
+      const { listBookCounts, completedDates } = await fetchHistoricReadingData();
+      setHistoricStats(calculateHistoricReadingStats(listBookCounts, completedDates));
+    } catch {
+      // Leave the previous records (or the placeholder) in place.
     }
   }
 
@@ -171,6 +186,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     );
     try {
       await setBookCompleted(bookId, completed);
+      loadHistoricStats();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to update.');
       load();
@@ -344,7 +360,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
         <HideReadToggle checked={hideRead} onChange={handleHideReadChange} />
       </div>
 
-      <ReadingStats stats={readingStats} currentDateGap={currentDateGap} />
+      <ReadingStats stats={readingStats} currentDateGap={currentDateGap} historicStats={historicStats} />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleEntryIds} strategy={verticalListSortingStrategy}>
