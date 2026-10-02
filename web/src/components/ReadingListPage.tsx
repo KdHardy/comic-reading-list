@@ -39,7 +39,7 @@ import {
 import { snapshotFromEntries } from '../lib/listSnapshot';
 import { calculateCurrentDateGap } from '../lib/currentDateGap';
 import { calculateHistoricReadingStats, type HistoricReadingStats } from '../lib/historicReadingStats';
-import { calculateReadingStats } from '../lib/readingStats';
+import { calculateListReadingStats, calculateReadingActivity, type ReadingActivity } from '../lib/readingStats';
 import { isBookEntry, type Book, type ListEntry, type ListSnapshot, type LocationOption } from '../lib/types';
 import { EditableTitle } from './EditableTitle';
 import { HideReadToggle } from './HideReadToggle';
@@ -59,6 +59,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [snapshot, setSnapshot] = useState<ListSnapshot | null>(null);
   const [historicStats, setHistoricStats] = useState<HistoricReadingStats | null>(null);
+  const [readingActivity, setReadingActivity] = useState<ReadingActivity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reverting, setReverting] = useState(false);
@@ -96,12 +97,13 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     }
   }
 
-  // Collection-wide records are optional extras; a failure keeps the last values rather than
-  // breaking the page.
+  // Collection-wide records and reading activity are optional extras; a failure keeps the last
+  // values rather than breaking the page.
   async function loadHistoricStats() {
     try {
       const { listBookCounts, completedDates } = await fetchHistoricReadingData();
       setHistoricStats(calculateHistoricReadingStats(listBookCounts, completedDates));
+      setReadingActivity(calculateReadingActivity(completedDates));
     } catch {
       // Leave the previous records (or the placeholder) in place.
     }
@@ -136,7 +138,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }, [listId]);
 
   const visibleEntries = useMemo(() => filterVisibleEntries(entries, hideRead), [entries, hideRead]);
-  const readingStats = useMemo(() => calculateReadingStats(entries), [entries]);
+  const readingStats = useMemo(() => calculateListReadingStats(entries), [entries]);
   const currentDateGap = useMemo(() => calculateCurrentDateGap(entries), [entries]);
 
   const visibleEntryIds = useMemo(
@@ -360,7 +362,12 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
         <HideReadToggle checked={hideRead} onChange={handleHideReadChange} />
       </div>
 
-      <ReadingStats stats={readingStats} currentDateGap={currentDateGap} historicStats={historicStats} />
+      <ReadingStats
+        stats={readingStats}
+        activity={readingActivity}
+        currentDateGap={currentDateGap}
+        historicStats={historicStats}
+      />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleEntryIds} strategy={verticalListSortingStrategy}>

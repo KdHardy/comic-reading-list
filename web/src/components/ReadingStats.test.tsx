@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ReadingStats } from './ReadingStats';
 
-const stats = { total: 5, completed: 2, completedThisWeek: 1, currentStreak: 1 };
+const stats = { total: 5, completed: 2 };
 
 describe('ReadingStats', () => {
   it('shows the current date gap as the right-most metric', () => {
@@ -16,7 +16,7 @@ describe('ReadingStats', () => {
   it('shows a placeholder when there is no current date gap', () => {
     render(<ReadingStats stats={stats} currentDateGap={null} />);
 
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('Current date gap').nextElementSibling?.textContent).toBe('—');
   });
 
   it('shows collection records under their matching metrics', () => {
@@ -34,6 +34,30 @@ describe('ReadingStats', () => {
     expect(detailFor('Read this week')).toBe('Best week: 9');
     expect(detailFor('Current streak')).toBe('Longest streak: 14');
     expect(detailFor('Comics read')).toBeUndefined();
+  });
+
+  it('shows list counts alongside collection-wide reading activity', () => {
+    render(
+      <ReadingStats
+        stats={stats}
+        activity={{ completedThisWeek: 7, currentStreak: 3 }}
+        currentDateGap={null}
+      />
+    );
+
+    const valueFor = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
+    expect(valueFor('Total comics')).toBe('5');
+    expect(valueFor('Comics read')).toBe('2');
+    expect(valueFor('Read this week')).toBe('7');
+    expect(valueFor('Current streak')).toBe('3');
+  });
+
+  it('shows placeholders while collection-wide reading activity is loading', () => {
+    render(<ReadingStats stats={stats} activity={null} currentDateGap={null} />);
+
+    const valueFor = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
+    expect(valueFor('Read this week')).toBe('—');
+    expect(valueFor('Current streak')).toBe('—');
   });
 
   it('shows placeholders while the collection records are loading', () => {
