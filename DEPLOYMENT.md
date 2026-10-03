@@ -38,8 +38,9 @@ The command may come from either:
 
 Cursor authorization requires GitHub's `performed_via_github_app` provenance plus the immutable
 GitHub IDs for both the bot account and Cursor App. A matching display name or bot login is not
-enough. The pull request must use a `cursor/*` branch in this repository, not a fork. Requests are
-serialized so only one production merge is evaluated at a time.
+enough. A Cursor request only deploys a `cursor/*` branch. A request from a human with write
+permission may deploy any branch. In both cases the branch must live in this repository, not a
+fork. Requests are serialized so only one production merge is evaluated at a time.
 
 The gate pins the pull request head commit, verifies the trusted commenter's current repository
 permission, requires the named GitHub Actions check to succeed, and verifies the head and base
