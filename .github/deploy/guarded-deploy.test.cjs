@@ -6,6 +6,7 @@ const path = require('node:path');
 const { describe, it } = require('node:test');
 const {
   CURSOR_APP,
+  isDeployableBranch,
   isGenuineCursorAppComment,
   isTrustedDeploySignal,
 } = require('./guarded-deploy.cjs');
@@ -104,6 +105,21 @@ describe('guarded deploy identity policy', () => {
       const comment = genuineCursorComment();
       comment.body = body;
       assert.equal(isTrustedDeploySignal(comment), false);
+    }
+  });
+});
+
+describe('guarded deploy branch policy', () => {
+  it('limits Cursor deploy requests to cursor/* branches', () => {
+    assert.equal(isDeployableBranch('cursor/fix-divider-1a2b', true), true);
+    for (const ref of ['feature/reading-stats', 'master', 'not-cursor/fix', 'cursor']) {
+      assert.equal(isDeployableBranch(ref, true), false);
+    }
+  });
+
+  it('accepts any branch from a write-permission human requester', () => {
+    for (const ref of ['feature/reading-stats', 'cursor/fix-divider-1a2b', 'fix-typo']) {
+      assert.equal(isDeployableBranch(ref, false), true);
     }
   });
 });

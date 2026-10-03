@@ -43,6 +43,12 @@ function isTrustedDeploySignal(comment) {
   );
 }
 
+// Cursor may only deploy its own cursor/* branches. Human requesters are verified for write
+// permission before this check, so any same-repository branch is acceptable for them.
+function isDeployableBranch(headRef, requestedByCursor) {
+  return !requestedByCursor || headRef.startsWith('cursor/');
+}
+
 async function run({ github, context, core }) {
   const owner = context.repo.owner;
   const repo = context.repo.repo;
@@ -95,8 +101,8 @@ async function run({ github, context, core }) {
     if (pull.head.repo?.full_name !== `${owner}/${repo}`) {
       throw new Error('Fork pull requests cannot use guarded deployment.');
     }
-    if (!pull.head.ref.startsWith('cursor/')) {
-      throw new Error('Guarded deployment only accepts cursor/* branches.');
+    if (!isDeployableBranch(pull.head.ref, requestedByCursor)) {
+      throw new Error('Cursor deploy requests only accept cursor/* branches.');
     }
 
     const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
@@ -175,7 +181,7 @@ async function run({ github, context, core }) {
       pull.state !== 'open'
       || pull.draft
       || pull.head.sha !== expectedHead
-      || pull.head.ref.startsWith('cursor/') === false
+      || !isDeployableBranch(pull.head.ref, requestedByCursor)
     ) {
       throw new Error('The pull request changed while validation ran. Run /deploy again.');
     }
@@ -215,6 +221,7 @@ async function run({ github, context, core }) {
 
 module.exports = {
   CURSOR_APP,
+  isDeployableBranch,
   isGenuineCursorAppComment,
   isTrustedDeploySignal,
   run,
