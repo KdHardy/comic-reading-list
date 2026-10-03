@@ -1,9 +1,10 @@
 import { formatDateGap, type DateGap } from '../lib/currentDateGap';
 import type { HistoricReadingStats } from '../lib/historicReadingStats';
-import type { ReadingStats as ReadingStatsValues } from '../lib/readingStats';
+import type { ListReadingStats, ReadingActivity } from '../lib/readingStats';
 
 interface Props {
-  stats: ReadingStatsValues;
+  stats: ListReadingStats;
+  activity?: ReadingActivity | null;
   currentDateGap: DateGap | null;
   historicStats?: HistoricReadingStats | null;
 }
@@ -14,16 +15,21 @@ interface Metric {
   detail?: string;
 }
 
-export function ReadingStats({ stats, currentDateGap, historicStats = null }: Props) {
+export function ReadingStats({ stats, activity = null, currentDateGap, historicStats = null }: Props) {
   const record = (value: number | undefined) => value ?? '—';
 
+  // Total comics and Comics read describe this list; the remaining reading metrics span every list.
   const metrics: Metric[] = [
     { label: 'Total comics', value: stats.total, detail: `Longest list: ${record(historicStats?.longestList)}` },
     { label: 'Comics read', value: stats.completed },
-    { label: 'Read this week', value: stats.completedThisWeek, detail: `Best week: ${record(historicStats?.bestWeek)}` },
+    {
+      label: 'Read this week',
+      value: record(activity?.completedThisWeek),
+      detail: `Best week: ${record(historicStats?.bestWeek)}`,
+    },
     {
       label: 'Current streak',
-      value: stats.currentStreak,
+      value: record(activity?.currentStreak),
       detail: `Longest streak: ${record(historicStats?.longestStreak)}`,
     },
     { label: 'Current date gap', value: formatDateGap(currentDateGap) },

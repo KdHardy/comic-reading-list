@@ -1,14 +1,19 @@
 import type { Book } from './types';
 
-export interface ReadingStats {
+/** Counts for the list being viewed. */
+export interface ListReadingStats {
   total: number;
   completed: number;
+}
+
+/** Reading activity across every list in the collection. */
+export interface ReadingActivity {
   completedThisWeek: number;
   currentStreak: number;
 }
 
 interface ReadingStatsRow {
-  book: Pick<Book, 'completed' | 'completed_date'> | null;
+  book: Pick<Book, 'completed'> | null;
 }
 
 export function startOfLocalDay(date: Date): Date {
@@ -25,28 +30,34 @@ export function localDayKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
-export function calculateReadingStats(
-  rows: readonly ReadingStatsRow[],
+export function calculateListReadingStats(rows: readonly ReadingStatsRow[]): ListReadingStats {
+  let total = 0;
+  let completed = 0;
+
+  for (const row of rows) {
+    if (!row.book) continue;
+    total += 1;
+    if (row.book.completed) completed += 1;
+  }
+
+  return { total, completed };
+}
+
+export function calculateReadingActivity(
+  completedDates: readonly (string | null)[],
   now: Date = new Date()
-): ReadingStats {
+): ReadingActivity {
   const today = startOfLocalDay(now);
   const weekStart = startOfLocalWeek(today);
   const nextWeekStart = new Date(weekStart);
   nextWeekStart.setDate(weekStart.getDate() + 7);
 
-  let total = 0;
-  let completed = 0;
   let completedThisWeek = 0;
   const readingDays = new Set<string>();
 
-  for (const row of rows) {
-    if (!row.book) continue;
-    total += 1;
-    if (!row.book.completed) continue;
-    completed += 1;
-
-    if (!row.book.completed_date) continue;
-    const completedAt = new Date(row.book.completed_date);
+  for (const completedDate of completedDates) {
+    if (!completedDate) continue;
+    const completedAt = new Date(completedDate);
     if (Number.isNaN(completedAt.getTime())) continue;
 
     if (completedAt >= weekStart && completedAt < nextWeekStart) {
@@ -72,10 +83,5 @@ export function calculateReadingStats(
     }
   }
 
-  return {
-    total,
-    completed,
-    completedThisWeek,
-    currentStreak,
-  };
+  return { completedThisWeek, currentStreak };
 }
