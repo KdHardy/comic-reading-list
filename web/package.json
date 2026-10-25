@@ -10,7 +10,7 @@
     "deploy:dry-run": "wrangler deploy --dry-run",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:migration": "node scripts/test-list-entry-migration.mjs"
+    "test:migration": "node scripts/test-list-entry-migration.mjs && node scripts/test-pull-list-migration.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

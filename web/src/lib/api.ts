@@ -6,7 +6,12 @@ import {
   type ListSnapshot,
   type LocationOption,
   type Note,
+  type PullListIssue,
+  type PullListSeriesMeta,
+  type PullListStatus,
   type ReadingListSummary,
+  type SeriesKey,
+  type TitleArtCrop,
 } from './types';
 
 const BOOK_FIELDS = `
@@ -264,6 +269,84 @@ export async function saveBookThumbnail(bookId: number, blob: Blob): Promise<voi
     p_book_id: bookId,
     p_thumbnail_data: base64,
     p_thumbnail_mime: blob.type || 'image/jpeg',
+  });
+  if (error) throw error;
+}
+
+const PULL_LIST_ISSUE_FIELDS = `
+  book_id, publisher, series, volume, number, publish_date,
+  thumbnail, thumbnail_cached_at, completed
+`;
+
+/** Every book on any list (once per list it appears on), for rolling up into series. */
+export async function fetchPullListIssues(): Promise<PullListIssue[]> {
+  const entries = await fetchAllPages<{ book: PullListIssue | null }>((from, to) =>
+    supabase
+      .from('list_entry')
+      .select(`book:book_id(${PULL_LIST_ISSUE_FIELDS})`)
+      .eq('entry_type', 'book')
+      .order('entry_id', { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: { book: PullListIssue | null }[] | null; error: unknown }>
+  );
+  return entries.flatMap((entry) => (entry.book ? [entry.book] : []));
+}
+
+export async function fetchPullListSeriesMeta(): Promise<PullListSeriesMeta[]> {
+  return fetchAllPages<PullListSeriesMeta>((from, to) =>
+    supabase
+      .from('pull_list_series')
+      .select(
+        'series, volume, publisher, family, status, sort_order, title_art_book_id, title_art_x, title_art_y, title_art_w, title_art_h'
+      )
+      .order('pull_list_series_id', { ascending: true })
+      .range(from, to)
+  );
+}
+
+function seriesKeyParams(key: SeriesKey) {
+  return { p_series: key.series, p_volume: key.volume, p_publisher: key.publisher };
+}
+
+export async function setPullListSeriesStatus(key: SeriesKey, status: PullListStatus | null): Promise<void> {
+  const { error } = await supabase.rpc('set_pull_list_series_status', {
+    p_secret: WRITE_SECRET,
+    ...seriesKeyParams(key),
+    p_status: status,
+  });
+  if (error) throw error;
+}
+
+export async function setPullListSeriesFamily(key: SeriesKey, family: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_pull_list_series_family', {
+    p_secret: WRITE_SECRET,
+    ...seriesKeyParams(key),
+    p_family: family,
+  });
+  if (error) throw error;
+}
+
+/** Pass `bookId = null` to go back to the default title art. */
+export async function setPullListSeriesTitleArt(
+  key: SeriesKey,
+  bookId: number | null,
+  crop: TitleArtCrop | null
+): Promise<void> {
+  const { error } = await supabase.rpc('set_pull_list_series_title_art', {
+    p_secret: WRITE_SECRET,
+    ...seriesKeyParams(key),
+    p_book_id: bookId,
+    p_x: crop?.x ?? null,
+    p_y: crop?.y ?? null,
+    p_w: crop?.w ?? null,
+    p_h: crop?.h ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function reorderPullListSeries(keysInOrder: SeriesKey[]): Promise<void> {
+  const { error } = await supabase.rpc('reorder_pull_list_series', {
+    p_secret: WRITE_SECRET,
+    p_series_keys: keysInOrder.map(({ series, volume, publisher }) => ({ series, volume, publisher })),
   });
   if (error) throw error;
 }
