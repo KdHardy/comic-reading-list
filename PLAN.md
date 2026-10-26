@@ -83,6 +83,7 @@ erDiagram
 | `0003_security.sql` | RLS policies (SELECT-only for anon) | ✅ |
 | `0004_remove_book_from_list.sql` | `remove_book_from_list` RPC + revert upsert fix | ✅ |
 | `0005_notes.sql` | `note` table + `add_note` / `update_note` / `delete_note` RPCs | ✅ |
+| `0011_pull_list.sql` | `pull_list_series` table + status / family / title art / reorder RPCs | ⏳ Apply before deploying |
 
 ---
 
@@ -125,6 +126,19 @@ erDiagram
 - [ ] Reading stats: longest reading streak
 - [ ] Reading stats: all-lists presentation
 - [ ] Automated tests
+
+### Web app — Pull List page
+
+- [x] Header navigation between Reading Lists and Pull List (`#/pull-list`)
+- [x] Series view: one row per `(series, volume, publisher)` across every list
+- [x] Columns: Publisher, Family, Title Art, Series Title, Volume, Total Issues, Issues Read, Status
+- [x] Total / read issue counts de-duplicated across lists
+- [x] Status dropdown (Read All, Maybe, Skip) with status filter
+- [x] Family: free-text with autocomplete from families already in use
+- [x] Title art: pick a cover and drag-crop the logo; defaults to the top band of the first cover
+- [x] Priority ordering (drag, up/down), persisted
+- [ ] Family auto-detection from an external source (ComicVine / League of Comic Geeks — TBD)
+- [ ] Storylines view
 
 ### Browser extension
 

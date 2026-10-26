@@ -172,6 +172,9 @@ See `supabase/migrations/0001_init_schema.sql` for the full definitions. Summary
 - `note` — one or more free-text notes per book (`note_id`, `book_id`, `note_text`, `created_at`); see
   `0005_notes.sql`. Book-level rather than list-level, since a book has one canonical set of notes
   regardless of which list(s) it's on.
+- `pull_list_series` — per-series Pull List metadata keyed by `(series, volume, publisher)`: family,
+  status (Read All / Maybe / Skip), priority order, and the cover + crop used as title art; see
+  `0011_pull_list.sql`. Issue totals and read counts are derived from `list_entry` + `book`.
 - `app_secret` — single-row table holding the shared write secret; never exposed via the REST API
 
 All writes go through the RPC functions in the migrations (`add_book_to_list`,
@@ -184,7 +187,7 @@ RLS — only `SELECT` is allowed.
 The core app is built and deployed. See [PLAN.md](PLAN.md) for the full feature checklist.
 
 **Done:** database schema, web reading list page (mixed book/divider ordering, stats, revert,
-delete, notes, auto-refresh, list memory), browser extension (capture mode, six adapters,
+delete, notes, auto-refresh, list memory), Pull List page (series view), browser extension (capture mode, six adapters,
 reliable submit), Cloudflare Worker deployment, focused automated tests.
 
 **Not started / deferred:** iPad Safari extension research, offline viewing.

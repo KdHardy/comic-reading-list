@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createReadingList, fetchLists } from './lib/api';
 import type { ReadingListSummary } from './lib/types';
+import { PullListPage } from './components/PullListPage';
 import { ReadingListPage } from './components/ReadingListPage';
 import { ThemeToggle } from './components/ThemeToggle';
 
 const LAST_LIST_KEY = 'comic-reading-list:lastListId';
+const PULL_LIST_HASH = '#/pull-list';
+
+type Page = 'lists' | 'pull-list';
+
+function pageFromHash(): Page {
+  return window.location.hash === PULL_LIST_HASH ? 'pull-list' : 'lists';
+}
 
 function readSavedListId(): number | null {
   const raw = localStorage.getItem(LAST_LIST_KEY);
@@ -34,6 +42,15 @@ export default function App() {
   const [selectedListId, setSelectedListId] = useState<number | null>(readSavedListId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState<Page>(pageFromHash);
+
+  useEffect(() => {
+    function onHashChange() {
+      setPage(pageFromHash());
+    }
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   const reloadLists = useCallback(async (preferListId?: number) => {
     try {
@@ -89,31 +106,47 @@ export default function App() {
   if (error) return <div className="app-status app-status-error">{error}</div>;
 
   return (
-    <div className="app">
+    <div className={`app${page === 'pull-list' ? ' app-wide' : ''}`}>
       <header className="app-header">
-        <h1 className="app-brand">Comic Reading List</h1>
+        <div className="app-header-start">
+          <h1 className="app-brand">Comic Reading List</h1>
+          <nav className="app-nav" aria-label="Pages">
+            <a href="#/" aria-current={page === 'lists' ? 'page' : undefined}>
+              Reading Lists
+            </a>
+            <a href={PULL_LIST_HASH} aria-current={page === 'pull-list' ? 'page' : undefined}>
+              Pull List
+            </a>
+          </nav>
+        </div>
         <div className="app-list-picker">
-          <select
-            value={selectedListId ?? ''}
-            onChange={(e) => handleListChange(Number(e.target.value))}
-            aria-label="Choose reading list"
-          >
-            {lists.length === 0 && <option value="">No lists yet</option>}
-            {lists.map((l) => (
-              <option key={l.list_id} value={l.list_id}>
-                {l.list_name}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={handleCreateList}>
-            + New list
-          </button>
+          {page === 'lists' && (
+            <>
+              <select
+                value={selectedListId ?? ''}
+                onChange={(e) => handleListChange(Number(e.target.value))}
+                aria-label="Choose reading list"
+              >
+                {lists.length === 0 && <option value="">No lists yet</option>}
+                {lists.map((l) => (
+                  <option key={l.list_id} value={l.list_id}>
+                    {l.list_name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={handleCreateList}>
+                + New list
+              </button>
+            </>
+          )}
           <ThemeToggle />
         </div>
       </header>
 
       <main>
-        {selectedListId ? (
+        {page === 'pull-list' ? (
+          <PullListPage />
+        ) : selectedListId ? (
           <ReadingListPage listId={selectedListId} onListRenamed={() => reloadLists(selectedListId)} />
         ) : (
           <p className="app-status">Create a reading list to get started.</p>
