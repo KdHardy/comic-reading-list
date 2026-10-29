@@ -1,6 +1,6 @@
 /**
  * Adapter for leagueofcomicgeeks.com — the "New Comics" list pages, series
- * search pages, and individual issue detail pages.
+ * pages, and individual issue detail pages.
  *
  * List-page selectors verified against a live page on 2026-07-05:
  * https://leagueofcomicgeeks.com/comics/new-comics/2021/07/07
@@ -12,9 +12,10 @@
  *
  * Each release week is rendered as `li.issue` (168 elements on that page —
  * this includes 141 hidden variant covers). `li.issue[data-parent="0"]`
- * isolates just the 27 main (non-variant) cards. Series search pages
- * (/search/<series id>) use the identical card markup, with variants marked
- * the same way. Search results are loaded in batches as you scroll
+ * isolates just the 27 main (non-variant) cards. Series pages use the
+ * identical card markup, with variants marked the same way. A series list
+ * has two URL forms: /search/<series id>?keyword=... and
+ * /comics/series/<series id>/<slug>. Series results are loaded in batches as you scroll
  * (`#comic-list-block[data-list-offset]`), so only cards already loaded are
  * captured. Covers are lazy-loaded: until a card scrolls into view its `src`
  * is a placeholder GIF and the real URL is in `data-src`.
@@ -38,17 +39,18 @@
 
   function getPageType() {
     const path = window.location.pathname;
-    if (/\/comics\/new-comics/.test(path) || isSearchPage()) return 'list';
+    if (/\/comics\/new-comics/.test(path) || isSeriesPage()) return 'list';
     if (/\/comic\/\d+/.test(path) || /\/comics\/\d+/.test(path)) return 'detail';
     return null;
   }
 
-  function isSearchPage() {
-    return /^\/search\/\d+/.test(window.location.pathname);
+  function isSeriesPage() {
+    const path = window.location.pathname;
+    return /^\/search\/\d+/.test(path) || /^\/comics\/series\/\d+/.test(path);
   }
 
   function getListHint() {
-    return isSearchPage() ? 'Scroll to the bottom first to load every issue.' : null;
+    return isSeriesPage() ? 'Scroll to the bottom first to load every issue.' : null;
   }
 
   function textOf(root, selector) {
