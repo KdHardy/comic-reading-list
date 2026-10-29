@@ -144,7 +144,7 @@ erDiagram
 | Adapter | Page types | Status |
 |---|---|---|
 | `comicBookHerald.js` | List (blog reading orders) | ✅ Verified; plain-text bullets supported |
-| `leagueOfComicGeeks.js` | List + detail | ✅ Fixed against live DOM (2021 new-comics pages, issue detail) |
+| `leagueOfComicGeeks.js` | List + detail | ✅ Fixed against live DOM (new-comics pages, `/search/<series id>` pages, issue detail); `node scripts/test-locg-adapter.mjs` checks saved pages |
 | `hoopla.js` | Detail | ✅ Fixed (`/comic/` URL pattern, live selectors) |
 | `fandomWiki.js` | List (wiki tables) | ✅ Verified (Buffy publication-order page, 596 comics) |
 | `amazonComixology.js` | Detail | ⚠️ Best-effort — verify on live Amazon pages |

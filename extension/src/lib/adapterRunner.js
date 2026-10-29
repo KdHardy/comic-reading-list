@@ -86,7 +86,10 @@ function showItemBoxes() {
     return;
   }
 
-  showBanner(`Click a comic to add it, or use "Add All" below. (Esc to cancel)`);
+  // Adapters may supply an optional getListHint() for page-specific advice
+  // (e.g. scrolling to load lazy-loaded results).
+  const hint = currentAdapter.getListHint?.();
+  showBanner(`Click a comic to add it, or use "Add All" below.${hint ? ` ${hint}` : ''} (Esc to cancel)`);
 
   cards.forEach((card) => {
     const box = document.createElement('div');

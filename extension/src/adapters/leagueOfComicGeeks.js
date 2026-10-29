@@ -1,16 +1,23 @@
 /**
- * Adapter for leagueofcomicgeeks.com — both the "New Comics" list pages and
- * individual issue detail pages.
+ * Adapter for leagueofcomicgeeks.com — the "New Comics" list pages, series
+ * search pages, and individual issue detail pages.
  *
  * List-page selectors verified against a live page on 2026-07-05:
  * https://leagueofcomicgeeks.com/comics/new-comics/2021/07/07
+ * and re-checked against saved pages on 2026-10-29:
+ * https://leagueofcomicgeeks.com/comics/new-comics (week of 2026-10-21)
+ * https://leagueofcomicgeeks.com/search/151468?keyword=trial%20of%20magneto
  * Detail-page selectors verified 2026-08-08:
  * https://leagueofcomicgeeks.com/comic/1664000/batman-110
  *
  * Each release week is rendered as `li.issue` (168 elements on that page —
  * this includes 141 hidden variant covers). `li.issue[data-parent="0"]`
- * isolates just the 27 main (non-variant) cards. All cards are present in
- * the initial DOM with no AJAX wait needed.
+ * isolates just the 27 main (non-variant) cards. Series search pages
+ * (/search/<series id>) use the identical card markup, with variants marked
+ * the same way. Search results are loaded in batches as you scroll
+ * (`#comic-list-block[data-list-offset]`), so only cards already loaded are
+ * captured. Covers are lazy-loaded: until a card scrolls into view its `src`
+ * is a placeholder GIF and the real URL is in `data-src`.
  */
 (function () {
   const SELECTORS = {
@@ -31,9 +38,17 @@
 
   function getPageType() {
     const path = window.location.pathname;
-    if (/\/comics\/new-comics/.test(path)) return 'list';
+    if (/\/comics\/new-comics/.test(path) || isSearchPage()) return 'list';
     if (/\/comic\/\d+/.test(path) || /\/comics\/\d+/.test(path)) return 'detail';
     return null;
+  }
+
+  function isSearchPage() {
+    return /^\/search\/\d+/.test(window.location.pathname);
+  }
+
+  function getListHint() {
+    return isSearchPage() ? 'Scroll to the bottom first to load every issue.' : null;
   }
 
   function textOf(root, selector) {
@@ -59,8 +74,20 @@
       volume: null,
       publisher: textOf(card, SELECTORS.listPublisher),
       publishDate,
-      thumbnail: card.querySelector(SELECTORS.listThumbnail)?.src ?? null,
+      thumbnail: getImageUrl(card.querySelector(SELECTORS.listThumbnail)),
     };
+  }
+
+  // Prefers a real `src`, falling back to the lazy-load `data-src` for
+  // covers that haven't scrolled into view yet.
+  function getImageUrl(img) {
+    const src = img?.getAttribute('src');
+    if (src && !src.startsWith('data:')) return img.src;
+
+    const lazySrc = img?.getAttribute('data-src');
+    if (lazySrc && !lazySrc.startsWith('data:')) return lazySrc;
+
+    return null;
   }
 
   function parseDetailReleaseDate() {
@@ -85,14 +112,8 @@
   }
 
   function getDetailThumbnailUrl() {
-    const img = document.querySelector(SELECTORS.detailThumbnail);
-    const src = img?.getAttribute('src');
-    if (src && !src.startsWith('data:')) return src;
-
-    const lazySrc = img?.getAttribute('data-src');
-    if (lazySrc && !lazySrc.startsWith('data:')) return lazySrc;
-
-    return document.querySelector('meta[property="og:image"]')?.getAttribute('content') ?? null;
+    return getImageUrl(document.querySelector(SELECTORS.detailThumbnail))
+      ?? document.querySelector('meta[property="og:image"]')?.getAttribute('content') ?? null;
   }
 
   function parseDetailPage() {
@@ -121,5 +142,5 @@
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
   }
 
-  initAdapter({ getPageType, getItemCards, parseCard, parseDetailPage });
+  initAdapter({ getPageType, getItemCards, parseCard, parseDetailPage, getListHint });
 })();
