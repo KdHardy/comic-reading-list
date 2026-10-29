@@ -152,7 +152,7 @@ Summary:
 | Adapter | Status |
 |---|---|
 | `comicBookHerald.js` | Verified (including plain-text bullet items) |
-| `leagueOfComicGeeks.js` | Verified (New Comics + series search list pages, detail pages) |
+| `leagueOfComicGeeks.js` | Verified (New Comics + series list pages, detail pages) |
 | `hoopla.js` | Verified (detail pages) |
 | `fandomWiki.js` | Verified (Fandom wiki comic list tables; e.g. Buffy publication order) |
 | `amazonComixology.js` | Best-effort — verify on live Amazon pages |
