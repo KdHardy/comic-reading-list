@@ -49,6 +49,8 @@ describe('normalizers', () => {
     expect(titleLooselyMatches('Buffy Season 9', 'Buffy the Vampire Slayer Season 11')).toBe(false);
     expect(titleLooselyMatches('Season 9', 'Buffy the Vampire Slayer Season Nine')).toBe(false);
     expect(titleLooselyMatches('Die', 'Die!Die!Die!')).toBe(true);
+    expect(titleLooselyMatches('A Hole in the World', 'Angel: A Hole in the World')).toBe(true);
+    expect(titleLooselyMatches('A Hole in the World', 'Angel: A Hole in the World Part Two')).toBe(false);
   });
 
   it('reduces publishers to their distinctive name', () => {
@@ -95,8 +97,8 @@ describe('filterCandidates', () => {
 
     expect(candidates.map((c) => c.sourceId)).toEqual(['2', '1']);
     expect(rejected.map((r) => [r.sourceId, r.reason])).toEqual([
-      ['3', 'title differs'],
       ['4', 'publisher differs'],
+      ['3', 'title differs'],
     ]);
   });
 
@@ -109,12 +111,23 @@ describe('filterCandidates', () => {
     expect(rejected[0].reason).toMatch(/after the issue was published/);
   });
 
-  it('rejects runs clearly too short for the issue numbers', () => {
+  it('keeps runs whose issue count is lower than the issue numbers (legacy numbering)', () => {
     const { candidates } = filterCandidates(
-      group({ books: [{ bookId: 1, number: '80', publishDate: '2021-05-18' }] }),
-      [candidate({ sourceId: '1', countOfIssues: 12 }), candidate({ sourceId: '2', countOfIssues: 79 })]
+      group({ series: 'Action Comics', books: [{ bookId: 1, number: '1031', publishDate: '2021-05-25' }] }),
+      [
+        candidate({ sourceId: '18005', name: 'Action Comics', startYear: 1938, countOfIssues: 864 }),
+        candidate({ sourceId: '91078', name: 'Action Comics', startYear: 2016, countOfIssues: 148 }),
+      ]
     );
-    expect(candidates.map((c) => c.sourceId)).toEqual(['2']);
+    expect(candidates.map((c) => c.sourceId)).toEqual(['91078', '18005']);
+  });
+
+  it('lists informative rejections before title mismatches', () => {
+    const { rejected } = filterCandidates(group(), [
+      candidate({ sourceId: '1', name: 'Catwoman: Lonely City' }),
+      candidate({ sourceId: '2', publisher: 'Marvel' }),
+    ]);
+    expect(rejected.map((r) => r.reason)).toEqual(['publisher differs', 'title differs']);
   });
 
   it('uses a year-style volume label to pick the run', () => {
@@ -145,7 +158,8 @@ describe('filterCandidates', () => {
       candidate({ sourceId: '3', name: 'Charmed Season Nine', startYear: 2011, publisher: 'Zenescope' }),
     ]);
     expect(loose.loose).toBe(true);
-    expect(loose.candidates.map((c) => c.sourceId)).toEqual(['2']);
+    // The main run first; the issue-date check rules out the one-shot.
+    expect(loose.candidates.map((c) => c.sourceId)).toEqual(['2', '1']);
 
     const exact = filterCandidates(group({ series: 'Die', publisher: 'Image' }), [
       candidate({ sourceId: '1', name: 'Die', startYear: 2018, publisher: 'Image' }),
@@ -172,12 +186,16 @@ describe('dates', () => {
     expect(compareDates(null, '2021-05-18', null).solid).toBe(false);
   });
 
-  it('moves a cover date back two months when there is no store date', () => {
+  it('tries a cover date as-is and moved back two months when there is no store date', () => {
+    // Two months ahead of release (Marvel/DC style): the shifted date lines up.
     expect(compareDates('2021-05-18', null, '2021-07-01')).toMatchObject({
       solid: true,
-      basis: 'cover',
+      basis: 'cover-2mo',
       releaseDate: '2021-05-02',
     });
+    // Release-month cover date (IDW style): the shift would cross into the previous year.
+    expect(compareDates('2010-01-06', null, '2010-01-01')).toMatchObject({ solid: true, basis: 'cover', days: 5 });
+    expect(compareDates('2021-05-18', null, '2022-07-01').solid).toBe(false);
     expect(compareDates('2021-05-18', null, null)).toMatchObject({ solid: false, basis: null, releaseDate: null });
   });
 

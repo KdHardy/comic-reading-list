@@ -41,9 +41,10 @@ pg_cron (every 30 min, 07:00–14:30 UTC)
 ## Matching (ComicVine adapter)
 
 A comic is matched on its **name, issue number and reading-list date** together.
-A date match is **solid** when the issue's release date (ComicVine's store date,
-or its cover date moved back two months when that's all there is) is in the
-**same year** as the reading-list date and within **92 days** (about a quarter).
+A date match is **solid** when the issue's release date is in the **same year**
+as the reading-list date and within **92 days** (about a quarter). The release
+date is ComicVine's store date; when only a cover date exists, it's tried both
+as-is and moved back two months (publishers differ), and the closer one counts.
 
 For each group of pending books with the same series/volume/publisher text:
 
@@ -52,11 +53,13 @@ For each group of pending books with the same series/volume/publisher text:
    first; the substring `/volumes?filter=name:…` is a fallback). Keep volumes
    whose **title** matches, ignoring case, punctuation, a leading "The" and
    spelled-out numbers ("Season Eleven" = "Season 11"). If none match exactly,
-   a looser in-order word match is allowed ("Buffy Season 9" ~ "Buffy the
-   Vampire Slayer Season Nine"). Then keep those whose **publisher** matches
-   loosely ("Marvel" = "Marvel Comics"), that **started** on or before the
-   comic's date (and in the volume's year, if the book has a year-style volume),
-   and that are long enough for the issue numbers.
+   a looser match is allowed: a franchise prefix ("A Hole in the World" ~
+   "Angel: A Hole in the World") or in-order words ("Buffy Season 9" ~ "Buffy
+   the Vampire Slayer Season Nine"). Then keep those whose **publisher**
+   matches loosely ("Marvel" = "Marvel Comics") and that **started** on or
+   before the comic's date (and in the volume's year, if the book has a
+   year-style volume). Issue counts aren't used to rule runs out, because legacy
+   numbering (Action Comics #1031 in a 148-issue run) breaks that.
 3. **Pick the volume by date:** for the earliest dated comic, look up its issue
    number in up to 5 candidate volumes and take the one whose release date is a
    solid match and closest.

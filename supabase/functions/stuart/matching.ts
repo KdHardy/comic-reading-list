@@ -62,12 +62,16 @@ export function normalizeTitle(title: string): string {
 }
 
 /**
- * A looser title match for shorthand names: every word of `wanted` appears in
- * `candidate`, in order, starting with the same first word. "Buffy Season 9"
- * loosely matches "Buffy the Vampire Slayer Season Nine". Only used when no
- * exact title fits, and always verified against an issue date.
+ * A looser title match for shorthand names, used only when no exact title fits
+ * and always verified against an issue date:
+ *  - the candidate is "<Franchise>: <wanted>" ("Angel: A Hole in the World"), or
+ *  - every word of `wanted` appears in `candidate`, in order, starting with the
+ *    same first word ("Buffy Season 9" ~ "Buffy the Vampire Slayer Season Nine").
  */
 export function titleLooselyMatches(wanted: string, candidate: string): boolean {
+  const colon = candidate.indexOf(':');
+  if (colon > 0 && normalizeTitle(candidate.slice(colon + 1)) === normalizeTitle(wanted)) return true;
+
   const want = titleWords(wanted);
   const have = titleWords(candidate);
   if (want.length === 0 || have[0] !== want[0]) return false;
@@ -99,13 +103,6 @@ export function normalizeIssueNumber(number: string | null | undefined): string 
   const trimmed = String(number).trim().replace(/^#/, '');
   if (!trimmed) return null;
   return trimmed.replace(/^0+(?=\d)/, '').toLowerCase();
-}
-
-function numericIssue(number: string | null): number | null {
-  const n = normalizeIssueNumber(number);
-  if (!n) return null;
-  const parsed = Number.parseFloat(n);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function yearOf(date: string | null): number | null {
@@ -141,10 +138,6 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
   const wantTitle = normalizeTitle(group.series);
   const wantYear = volumeYear(group.volume);
   const firstYear = yearOf(earliestPublishDate(group.books));
-  const maxIssue = group.books.reduce<number | null>((max, b) => {
-    const n = numericIssue(b.number);
-    return n != null && (max == null || n > max) ? n : max;
-  }, null);
 
   const rejected: CandidateFilterResult['rejected'] = [];
   const reject = (c: VolumeCandidate, reason: string) =>
@@ -172,11 +165,8 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
       reject(c, `started ${c.startYear}, after the issue was published (${firstYear})`);
       continue;
     }
-    // ComicVine can lag on new issues, so only reject clearly-too-short runs.
-    if (maxIssue != null && c.countOfIssues != null && c.countOfIssues > 0 && maxIssue > c.countOfIssues + 3) {
-      reject(c, `only ${c.countOfIssues} issues, need #${maxIssue}`);
-      continue;
-    }
+    // Issue counts aren't used to rule runs out: legacy numbering (Action
+    // Comics #1031 in a 148-issue run) breaks that. The issue-date check decides.
     candidates.push(c);
   }
 
@@ -184,6 +174,8 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
   // started on or before it is the likeliest.
   // On a tie, the plainer title first ("Buffy … Season Nine" before "Buffy … Season Nine: Guarded").
   candidates.sort((a, b) => (b.startYear ?? 0) - (a.startYear ?? 0) || a.name.length - b.name.length);
+  // Report the informative rejections (publisher, year) before "title differs".
+  rejected.sort((a, b) => Number(a.reason === 'title differs') - Number(b.reason === 'title differs'));
   return { candidates, loose: loose && candidates.length > 0, rejected };
 }
 
@@ -194,7 +186,7 @@ export function daysBetween(a: string, b: string): number {
 
 /** How far a release date may be from the reading-list date: about a quarter. */
 export const DATE_WINDOW_DAYS = 92;
-/** Cover dates usually run about two months after the release (store) date. */
+/** Many publishers' cover dates run about two months after the release (store) date. */
 export const COVER_DATE_LEAD_DAYS = 60;
 
 export interface DateMatch {
@@ -202,7 +194,7 @@ export interface DateMatch {
   solid: boolean;
   /** Days between the reading-list date and the (estimated) release date. */
   days: number | null;
-  basis: 'store' | 'cover' | null;
+  basis: 'store' | 'cover' | 'cover-2mo' | null;
   releaseDate: string | null;
 }
 
@@ -211,17 +203,32 @@ function shiftDays(date: string, days: number): string {
 }
 
 /**
- * Compare a comic's reading-list date with a database issue's release date
- * (the store date, or the cover date moved back two months when that's all
- * there is). A solid match is in the same year and within about a quarter.
+ * Compare a comic's reading-list date with a database issue's release date.
+ * The store date is used when there is one. Otherwise the cover date is tried
+ * both as-is and moved back two months, since publishers differ (some print
+ * the release month, others a month or two ahead); the closer one counts.
+ * A solid match is in the same year and within about a quarter.
  */
 export function compareDates(bookDate: string | null, storeDate: string | null, coverDate: string | null): DateMatch {
-  const basis = storeDate ? 'store' : coverDate ? 'cover' : null;
-  const releaseDate = storeDate ?? (coverDate ? shiftDays(coverDate, -COVER_DATE_LEAD_DAYS) : null);
-  if (!bookDate || !releaseDate) return { solid: false, days: null, basis, releaseDate };
-  const days = daysBetween(bookDate, releaseDate);
-  const solid = yearOf(bookDate) === yearOf(releaseDate) && days <= DATE_WINDOW_DAYS;
-  return { solid, days, basis, releaseDate };
+  const options: { basis: DateMatch['basis']; date: string }[] = storeDate
+    ? [{ basis: 'store', date: storeDate }]
+    : coverDate
+      ? [
+          { basis: 'cover', date: coverDate },
+          { basis: 'cover-2mo', date: shiftDays(coverDate, -COVER_DATE_LEAD_DAYS) },
+        ]
+      : [];
+  if (options.length === 0) return { solid: false, days: null, basis: null, releaseDate: null };
+  if (!bookDate) return { solid: false, days: null, basis: options[0].basis, releaseDate: options[0].date };
+
+  const scored = options.map((o) => {
+    const days = daysBetween(bookDate, o.date);
+    return { ...o, days, solid: yearOf(bookDate) === yearOf(o.date) && days <= DATE_WINDOW_DAYS };
+  });
+  // Prefer a solid reading, then the closest.
+  scored.sort((a, b) => Number(b.solid) - Number(a.solid) || a.days - b.days);
+  const best = scored[0];
+  return { solid: best.solid, days: best.days, basis: best.basis, releaseDate: best.date };
 }
 
 /** The book in a group used to verify candidate volumes: the earliest dated, numbered one. */
