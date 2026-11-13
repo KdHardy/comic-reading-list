@@ -84,8 +84,8 @@ erDiagram
 | `0004_remove_book_from_list.sql` | `remove_book_from_list` RPC + revert upsert fix | ✅ |
 | `0005_notes.sql` | `note` table + `add_note` / `update_note` / `delete_note` RPCs | ✅ |
 | `0011_pull_list.sql` | `pull_list_series` table + status / family / title art / reorder RPCs | ✅ |
-| `0012_stuart_metadata.sql` | Stuart: `series_volume`, storylines, scan state on `book`, runs, errors, config | ⏳ |
-| `0013_stuart_schedule.sql` | Stuart: pg_cron + pg_net nightly schedule (`stuart_tick`) | ⏳ |
+| `0012_stuart_metadata.sql` | Stuart: `series_volume`, storylines, scan state on `book`, runs, errors, config | ✅ |
+| `0013_stuart_schedule.sql` | Stuart: pg_cron + pg_net nightly schedule (`stuart_tick`) | ✅ |
 
 ---
 

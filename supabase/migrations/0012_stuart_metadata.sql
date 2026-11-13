@@ -88,6 +88,7 @@ create index if not exists idx_book_series_volume on public.book (series_volume_
 create or replace function public._book_mark_for_scan()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
     if coalesce(current_setting('stuart.applying', true), '') = 'on' then
