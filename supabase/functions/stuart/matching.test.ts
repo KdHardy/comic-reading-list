@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   compareDates,
   filterCandidates,
+  findAlias,
   groupBooks,
+  issueSearchWindow,
+  pickLookupBook,
+  skippedFormat,
   isOngoing,
   normalizeIssueNumber,
   normalizePublisher,
@@ -215,5 +219,60 @@ describe('groupBooks', () => {
       { book_id: 3, series: 'X-Factor', volume: null, publisher: 'Marvel Comics', number: '9', publish_date: null },
     ]);
     expect(groups.map((g) => g.books.map((b) => b.bookId))).toEqual([[1], [2, 3]]);
+  });
+});
+
+describe('aliases', () => {
+  const buffyClassic = { alias: 'Buffy Classic', title: 'Buffy the Vampire Slayer', startYear: 1998, publisher: 'Dark Horse Comics' };
+
+  it('finds an alias by name, ignoring case and punctuation', () => {
+    expect(findAlias('buffy classic', [buffyClassic])).toBe(buffyClassic);
+    expect(findAlias('Buffy Classic one-shot', [buffyClassic])).toBeNull();
+  });
+
+  it('filters candidates by the alias title, year and publisher', () => {
+    const { candidates } = filterCandidates(
+      group({
+        series: 'Buffy Classic',
+        publisher: 'Dark Horse Comics',
+        books: [{ bookId: 1, number: '1', publishDate: '1998-09-23' }],
+        alias: buffyClassic,
+      }),
+      [
+        candidate({ sourceId: '1', name: 'Buffy the Vampire Slayer Classic', startYear: 2011, publisher: 'Dark Horse Comics' }),
+        candidate({ sourceId: '2', name: 'Buffy the Vampire Slayer', startYear: 1998, publisher: 'Dark Horse Comics' }),
+        candidate({ sourceId: '3', name: 'Buffy the Vampire Slayer', startYear: 2007, publisher: 'Dark Horse Comics' }),
+      ]
+    );
+    expect(candidates.map((c) => c.sourceId)).toEqual(['2']);
+  });
+});
+
+describe('skippedFormat', () => {
+  it('recognizes backup stories and extras by their label', () => {
+    expect(skippedFormat('Buffy Season 9 short')).toBe('short');
+    expect(skippedFormat('Angel extra')).toBe('extra');
+    expect(skippedFormat('Angel one-shot')).toBeNull();
+    expect(skippedFormat('Short Stack')).toBeNull();
+  });
+});
+
+describe('issueSearchWindow', () => {
+  it('spans about a quarter either side, inside the same year', () => {
+    expect(issueSearchWindow('2021-06-01')).toEqual({ start: '2021-03-01', end: '2021-09-01' });
+    expect(issueSearchWindow('2021-01-20')).toEqual({ start: '2021-01-01', end: '2021-04-22' });
+    expect(issueSearchWindow('2021-12-20')).toEqual({ start: '2021-09-19', end: '2021-12-31' });
+    expect(issueSearchWindow('2021-06-01', 31)).toEqual({ start: '2021-05-01', end: '2021-07-02' });
+  });
+
+  it('looks issues up by the highest-numbered dated comic', () => {
+    const g = group({
+      books: [
+        { bookId: 1, number: '7', publishDate: '2021-05-26' },
+        { bookId: 2, number: '11', publishDate: '2021-09-15' },
+        { bookId: 3, number: '12', publishDate: null },
+      ],
+    });
+    expect(pickLookupBook(g)?.bookId).toBe(2);
   });
 });

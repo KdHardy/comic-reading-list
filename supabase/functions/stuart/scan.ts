@@ -3,7 +3,7 @@
 // be tested without a database (see scan.test.ts).
 
 import { StopRun, type GroupResult, type SeriesAdapter, type StorylineInfo, type VolumeInfo } from './adapter.ts';
-import { groupBooks, type BookGroup } from './matching.ts';
+import { findAlias, groupBooks, skippedFormat, type BookGroup, type SeriesAlias } from './matching.ts';
 
 export interface PendingBookRow {
   book_id: number;
@@ -23,6 +23,9 @@ export interface ScanError {
 
 export interface StuartStore {
   pendingBooks(limit: number): Promise<PendingBookRow[]>;
+  aliases(): Promise<SeriesAlias[]>;
+  /** Mark a book as not something Stuart matches (e.g. a backup story), clearing its errors. */
+  skipBook(bookId: number, reason: string): Promise<void>;
   knownVolume(group: BookGroup): Promise<{ source: string; sourceId: string } | null>;
   knownStorylineIds(source: string): Promise<Set<string>>;
   upsertVolume(volume: VolumeInfo): Promise<number>;
@@ -57,7 +60,8 @@ export interface GroupReport {
   volume: string | null;
   publisher: string | null;
   bookIds: number[];
-  outcome: 'matched' | 'failed' | 'deferred';
+  outcome: 'matched' | 'failed' | 'deferred' | 'skipped';
+  alias?: string;
   adapter?: string;
   volumeMatch?: { name: string; startYear: number | null; publisher: string | null; sourceId: string; url: string | null };
   issuesMatched?: number;
@@ -72,6 +76,7 @@ export interface ScanSummary {
   status: 'completed' | 'partial' | 'failed';
   matched: number;
   failed: number;
+  skipped: number;
   deferred: number;
   note: string | null;
   requests: Record<string, Record<string, number>>;
@@ -84,6 +89,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   const rows = await store.pendingBooks(options.maxBooks ?? 500);
   const groups = groupBooks(rows);
   const limit = options.maxGroups ?? groups.length;
+  const aliases = await store.aliases();
 
   const storylineIds = new Map<string, Set<string>>();
   for (const adapter of adapters) storylineIds.set(adapter.source, await store.knownStorylineIds(adapter.source));
@@ -91,6 +97,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   const reports: GroupReport[] = [];
   let matched = 0;
   let failed = 0;
+  let skipped = 0;
   let status: ScanSummary['status'] = 'completed';
   let note: string | null = null;
 
@@ -104,6 +111,19 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
         outcome: 'failed',
       };
       reports.push(report);
+
+      const format = skippedFormat(group.series);
+      if (format) {
+        report.outcome = 'skipped';
+        skipped += group.books.length;
+        if (!dryRun) {
+          for (const book of group.books) await store.skipBook(book.bookId, `${format}: not a standalone issue`);
+        }
+        continue;
+      }
+
+      group.alias = findAlias(group.series, aliases);
+      if (group.alias) report.alias = group.alias.title;
 
       const errors: ScanError[] = [];
       let result: (GroupResult & { kind: 'matched' }) | null = null;
@@ -177,7 +197,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   const requests: ScanSummary['requests'] = {};
   for (const adapter of adapters) requests[adapter.name] = adapter.requestCounts();
 
-  const deferred = rows.length - matched - failed;
+  const deferred = rows.length - matched - failed - skipped;
   if (status === 'completed' && deferred > 0 && limit < groups.length) {
     note = note ?? `Stopped after ${limit} groups.`;
   }
@@ -186,5 +206,5 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
     await store.finishRun(runId!, { status, matched, failed, requests, note });
   }
 
-  return { runId, status, matched, failed, deferred, note, requests, groups: reports };
+  return { runId, status, matched, failed, skipped, deferred, note, requests, groups: reports };
 }

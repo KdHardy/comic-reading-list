@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import type { StorylineInfo, VolumeInfo } from './adapter.ts';
-import type { BookGroup } from './matching.ts';
+import type { BookGroup, SeriesAlias } from './matching.ts';
 import type { PendingBookRow, ScanError, StuartStore } from './scan.ts';
 
 function check<T>(result: { data: T; error: { message: string } | null }, what: string): T {
@@ -15,6 +15,37 @@ export class SupabaseStuartStore implements StuartStore {
 
   async pendingBooks(limit: number): Promise<PendingBookRow[]> {
     return check(await this.db.rpc('stuart_pending_books', { p_limit: limit }), 'stuart_pending_books') as PendingBookRow[];
+  }
+
+  async aliases(): Promise<SeriesAlias[]> {
+    const rows = check(
+      await this.db.from('stuart_series_alias').select('alias, title, start_year, publisher'),
+      'stuart_series_alias'
+    ) as { alias: string; title: string; start_year: number | null; publisher: string | null }[];
+    return rows.map((r) => ({ alias: r.alias, title: r.title, startYear: r.start_year, publisher: r.publisher }));
+  }
+
+  async skipBook(bookId: number, reason: string): Promise<void> {
+    check(await this.db.rpc('stuart_skip_book', { p_book_id: bookId, p_reason: reason }), 'stuart_skip_book');
+  }
+
+  /** Requests made by batches that started in the last `minutes`, by adapter and resource. */
+  async recentRequestCounts(minutes: number): Promise<Record<string, Record<string, number>>> {
+    const since = new Date(Date.now() - minutes * 60_000).toISOString();
+    const rows = check(
+      await this.db.from('stuart_run').select('requests').gte('started_at', since),
+      'stuart_run'
+    ) as { requests: Record<string, Record<string, number>> | null }[];
+    const totals: Record<string, Record<string, number>> = {};
+    for (const { requests } of rows) {
+      for (const [adapter, byResource] of Object.entries(requests ?? {})) {
+        totals[adapter] ??= {};
+        for (const [resource, n] of Object.entries(byResource ?? {})) {
+          totals[adapter][resource] = (totals[adapter][resource] ?? 0) + Number(n);
+        }
+      }
+    }
+    return totals;
   }
 
   async knownVolume(group: BookGroup) {

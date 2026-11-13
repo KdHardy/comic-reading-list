@@ -22,9 +22,16 @@ import {
   earliestPublishDate,
   filterCandidates,
   isOngoing,
+  issueSearchWindow,
+  normalizeTitle,
   normalizeIssueNumber,
+  pickLookupBook,
   pickProbeBook,
+  searchTitle,
+  titleLooselyMatches,
+  publishersMatch,
   type BookGroup,
+  type GroupBook,
   type VolumeCandidate,
 } from './matching.ts';
 
@@ -33,6 +40,10 @@ const USER_AGENT = 'ComicReadingList-Stuart/1.0 (personal reading-list metadata 
 const VOLUME_FIELDS = 'id,name,start_year,publisher,count_of_issues,last_issue,site_detail_url';
 const ISSUE_LIST_FIELDS = 'id,issue_number,store_date,cover_date';
 const MAX_VERIFY_CANDIDATES = 5;
+/** Issue-lookup results beyond this are too broad (e.g. every #1 in a quarter) to page through. */
+const MAX_ISSUE_LOOKUP_RESULTS = 200;
+/** Issue lookups try a month either side first, then about a quarter. */
+const ISSUE_LOOKUP_WINDOWS_DAYS = [31, DATE_WINDOW_DAYS];
 
 export interface ComicVineOptions {
   apiKey: string;
@@ -43,6 +54,11 @@ export interface ComicVineOptions {
   minIntervalMs?: number;
   /** Request cap for this batch, across all resources. */
   maxRequests?: number;
+  /**
+   * Requests still allowed per resource (ComicVine limits each resource to
+   * ~200 an hour). Resources not listed are only bound by maxRequests.
+   */
+  remainingByResource?: Record<string, number>;
   /** Epoch ms after which no new request starts. */
   deadline?: number;
   /** "YYYY-MM-DD" used for the ongoing check. */
@@ -71,6 +87,7 @@ interface CvIssue {
   issue_number: string | null;
   store_date: string | null;
   cover_date: string | null;
+  volume?: { id: number; name: string } | null;
 }
 
 interface CvArcCredit {
@@ -94,6 +111,7 @@ export class ComicVineAdapter implements SeriesAdapter {
   private readonly now: () => number;
   private readonly minIntervalMs: number;
   private readonly maxRequests: number;
+  private readonly remainingByResource: Record<string, number>;
   private readonly deadline: number;
   private readonly today: string;
   private lastRequestAt = 0;
@@ -106,6 +124,7 @@ export class ComicVineAdapter implements SeriesAdapter {
     this.now = options.now ?? Date.now;
     this.minIntervalMs = options.minIntervalMs ?? 1100;
     this.maxRequests = options.maxRequests ?? 90;
+    this.remainingByResource = options.remainingByResource ?? {};
     this.deadline = options.deadline ?? Number.POSITIVE_INFINITY;
     this.today = options.today ?? new Date().toISOString().slice(0, 10);
   }
@@ -120,6 +139,10 @@ export class ComicVineAdapter implements SeriesAdapter {
 
   private async get<T>(resource: string, path: string, params: Record<string, string>): Promise<CvResponse<T>> {
     if (this.total >= this.maxRequests) throw new BudgetExhausted('request budget for this batch is used up');
+    const hourly = this.remainingByResource[resource];
+    if (hourly !== undefined && (this.counts[resource] ?? 0) >= hourly) {
+      throw new BudgetExhausted(`hourly ComicVine limit for "${resource}" reached; continuing next batch`);
+    }
     const wait = this.lastRequestAt + this.minIntervalMs - this.now();
     if (this.now() + Math.max(wait, 0) > this.deadline) throw new BudgetExhausted('batch time limit reached');
     if (wait > 0) await this.sleep(wait);
@@ -180,7 +203,7 @@ export class ComicVineAdapter implements SeriesAdapter {
    */
   private async findCandidates(group: BookGroup): Promise<{ volumes: CvVolume[]; all: VolumeCandidate[] }> {
     const search = await this.get<CvVolume[]>('search', 'search/', {
-      query: group.series,
+      query: searchTitle(group),
       resources: 'volume',
       field_list: VOLUME_FIELDS,
       limit: '10',
@@ -189,7 +212,7 @@ export class ComicVineAdapter implements SeriesAdapter {
 
     if (filterCandidates(group, volumes.map((v) => this.toCandidate(v))).candidates.length === 0) {
       const byName = await this.get<CvVolume[]>('volumes', 'volumes/', {
-        filter: `name:${this.filterValue(group.series)}`,
+        filter: `name:${this.filterValue(searchTitle(group))}`,
         field_list: VOLUME_FIELDS,
         limit: '100',
       });
@@ -205,6 +228,71 @@ export class ComicVineAdapter implements SeriesAdapter {
       limit: '5',
     });
     return response.status_code === 1 ? response.results[0] ?? null : null;
+  }
+
+  /**
+   * Find the volume by the issue itself: every issue with this number released
+   * within about a quarter of the reading-list date (same year), keeping those
+   * whose volume title matches. Catches runs that search ranks below its top 10
+   * (e.g. Batman #109 in 2021, under dozens of older "Batman" volumes).
+   */
+  private async findVolumeByIssue(
+    group: BookGroup,
+    probe: GroupBook
+  ): Promise<{ volume: CvVolume | null; details: Record<string, unknown> }> {
+    const number = this.filterValue(probe.number!);
+    const title = searchTitle(group);
+    const wantPublisher = group.alias?.publisher ?? group.publisher;
+    const details: Record<string, unknown> = { issue_number: probe.number, publish_date: probe.publishDate, tries: [] };
+    const tried = new Set<number>();
+
+    for (const days of ISSUE_LOOKUP_WINDOWS_DAYS) {
+      const { start, end } = issueSearchWindow(probe.publishDate!, days);
+      for (const field of ['store_date', 'cover_date'] as const) {
+        const attempt: Record<string, unknown> = { field, window: [start, end] };
+        (details.tries as unknown[]).push(attempt);
+
+        const found: CvIssue[] = [];
+        for (let offset = 0; offset < MAX_ISSUE_LOOKUP_RESULTS; offset += 100) {
+          const page = await this.get<CvIssue[]>('issues', 'issues/', {
+            filter: `issue_number:${number},${field}:${start} 00:00:00|${end} 23:59:59`,
+            field_list: `${ISSUE_LIST_FIELDS},volume`,
+            limit: '100',
+            offset: String(offset),
+          });
+          if (page.status_code !== 1) break;
+          if (page.number_of_total_results > MAX_ISSUE_LOOKUP_RESULTS) {
+            attempt.result = `too many results (${page.number_of_total_results})`;
+            break;
+          }
+          found.push(...page.results);
+          if (found.length >= page.number_of_total_results) break;
+        }
+
+        const exact = found.filter((i) => i.volume && normalizeTitle(i.volume.name) === normalizeTitle(title));
+        const titled = exact.length > 0 ? exact : found.filter((i) => i.volume && titleLooselyMatches(title, i.volume.name));
+        const ranked = titled
+          .map((issue) => ({ issue, dates: compareDates(probe.publishDate, issue.store_date, issue.cover_date) }))
+          .filter((r) => r.dates.solid)
+          .sort((a, b) => a.dates.days! - b.dates.days!);
+        attempt.matches = ranked.map((r) => ({
+          volume_id: r.issue.volume!.id,
+          volume: r.issue.volume!.name,
+          release_date: r.dates.releaseDate,
+          days_apart: r.dates.days,
+        }));
+
+        for (const { issue } of ranked) {
+          if (tried.has(issue.volume!.id) || tried.size >= 3) continue;
+          tried.add(issue.volume!.id);
+          const volume = await this.volumeById(String(issue.volume!.id));
+          if (volume && (!wantPublisher || publishersMatch(wantPublisher, volume.publisher?.name))) {
+            return { volume, details };
+          }
+        }
+      }
+    }
+    return { volume: null, details };
   }
 
   private async volumeById(sourceId: string): Promise<CvVolume | null> {
@@ -264,11 +352,8 @@ export class ComicVineAdapter implements SeriesAdapter {
     }
 
     if (!chosen) {
+      const title = searchTitle(group);
       const { volumes, all } = await this.findCandidates(group);
-      if (all.length === 0) {
-        return { kind: 'failed', code: 'not_found', message: `No ComicVine volume named "${group.series}".` };
-      }
-
       const { candidates, loose, rejected } = filterCandidates(group, all);
       const summary = (c: VolumeCandidate) => ({
         id: c.sourceId,
@@ -278,45 +363,56 @@ export class ComicVineAdapter implements SeriesAdapter {
         issues: c.countOfIssues,
         url: c.siteUrl,
       });
-      if (candidates.length === 0) {
-        return {
-          kind: 'failed',
-          code: 'no_candidates',
-          message: `Found ${all.length} ComicVine volume(s) for "${group.series}", but none fit the publisher, year or issue numbers.`,
-          details: { rejected: rejected.slice(0, 10) },
-        };
-      }
 
       // A solid match needs the comic's name, issue number AND date: the issue
       // must have come out in the same year and within about a quarter.
       const probe = pickProbeBook(group);
       if (!probe) {
-        return {
-          kind: 'failed',
-          code: 'no_date',
-          message: `None of the "${group.series}" comics has both an issue number and a publish date, so no ComicVine volume can be confirmed.`,
-          details: { loose_title_match: loose, candidates: candidates.slice(0, 10).map(summary) },
-        };
+        return candidates.length === 0
+          ? {
+              kind: 'failed',
+              code: all.length === 0 ? 'not_found' : 'no_candidates',
+              message: `No ComicVine volume fits "${title}", and the comics have no issue number and date to look one up by.`,
+              details: { rejected: rejected.slice(0, 10) },
+            }
+          : {
+              kind: 'failed',
+              code: 'no_date',
+              message: `None of the "${group.series}" comics has both an issue number and a publish date, so no ComicVine volume can be confirmed.`,
+              details: { loose_title_match: loose, candidates: candidates.slice(0, 10).map(summary) },
+            };
       }
 
-      const checked: { candidate: VolumeCandidate; issue: string | null; release_date: string | null; days: number | null; solid: boolean }[] = [];
-      let match: VolumeCandidate | null = null;
-      let best = Number.POSITIVE_INFINITY;
-      for (const candidate of candidates.slice(0, MAX_VERIFY_CANDIDATES)) {
-        const issue = await this.issueDates(candidate.sourceId, probe.number!);
-        const dates = compareDates(probe.publishDate, issue?.store_date ?? null, issue?.cover_date ?? null);
-        checked.push({ candidate, issue: issue ? String(issue.id) : null, release_date: dates.releaseDate, days: dates.days, solid: dates.solid });
-        if (dates.solid && dates.days! < best) {
-          match = candidate;
-          best = dates.days!;
-          if (best <= 7) break; // can't do better than the same week
+      let failure: GroupResult & { kind: 'failed' };
+      if (candidates.length === 0) {
+        failure =
+          all.length === 0
+            ? { kind: 'failed', code: 'not_found', message: `No ComicVine volume named "${title}".`, details: {} }
+            : {
+                kind: 'failed',
+                code: 'no_candidates',
+                message: `Found ${all.length} ComicVine volume(s) for "${title}", but none fit the publisher or year.`,
+                details: { rejected: rejected.slice(0, 10) },
+              };
+      } else {
+        const checked: { candidate: VolumeCandidate; issue: string | null; release_date: string | null; days: number | null }[] = [];
+        let match: VolumeCandidate | null = null;
+        let best = Number.POSITIVE_INFINITY;
+        for (const candidate of candidates.slice(0, MAX_VERIFY_CANDIDATES)) {
+          const issue = await this.issueDates(candidate.sourceId, probe.number!);
+          const dates = compareDates(probe.publishDate, issue?.store_date ?? null, issue?.cover_date ?? null);
+          checked.push({ candidate, issue: issue ? String(issue.id) : null, release_date: dates.releaseDate, days: dates.days });
+          if (dates.solid && dates.days! < best) {
+            match = candidate;
+            best = dates.days!;
+            if (best <= 7) break; // can't do better than the same week
+          }
         }
-      }
-      if (!match) {
-        return {
+        if (match) chosen = volumes.find((v) => String(v.id) === match!.sourceId) ?? null;
+        failure = {
           kind: 'failed',
           code: 'no_date_match',
-          message: `No ComicVine volume of "${group.series}" has #${probe.number} released in ${probe.publishDate!.slice(0, 4)} within ${DATE_WINDOW_DAYS} days of ${probe.publishDate}.`,
+          message: `No ComicVine volume of "${title}" has #${probe.number} released in ${probe.publishDate!.slice(0, 4)} within ${DATE_WINDOW_DAYS} days of ${probe.publishDate}.`,
           details: {
             checked_issue: probe.number,
             publish_date: probe.publishDate,
@@ -327,9 +423,14 @@ export class ComicVineAdapter implements SeriesAdapter {
           },
         };
       }
-      chosen = volumes.find((v) => String(v.id) === match!.sourceId) ?? null;
+
+      // Search didn't turn up the run: look the issue itself up by number and date.
       if (!chosen) {
-        return { kind: 'failed', code: 'internal', message: 'Matched candidate disappeared from the result set.' };
+        const byIssue = await this.findVolumeByIssue(group, pickLookupBook(group) ?? probe);
+        if (!byIssue.volume) {
+          return { ...failure, details: { ...(failure.details as object), issue_lookup: byIssue.details } };
+        }
+        chosen = byIssue.volume;
       }
     }
 

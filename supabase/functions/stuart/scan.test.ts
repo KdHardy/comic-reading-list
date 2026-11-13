@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { StopRun, type GroupResult, type SeriesAdapter, type StorylineInfo, type VolumeInfo } from './adapter.ts';
-import type { BookGroup } from './matching.ts';
+import type { BookGroup, SeriesAlias } from './matching.ts';
 import { runScan, type PendingBookRow, type ScanError, type StuartStore } from './scan.ts';
 
 class MemoryStore implements StuartStore {
@@ -9,11 +9,19 @@ class MemoryStore implements StuartStore {
   matches: { bookId: number; seriesVolumeId: number; sourceIssueId: string | null; storylines: StorylineInfo[] }[] = [];
   failures: { bookId: number; errors: ScanError[] }[] = [];
   known = new Map<string, { source: string; sourceId: string }>();
+  skipped: { bookId: number; reason: string }[] = [];
+  aliasList: SeriesAlias[] = [];
 
   constructor(private rows: PendingBookRow[]) {}
 
   async pendingBooks() {
     return this.rows;
+  }
+  async aliases() {
+    return this.aliasList;
+  }
+  async skipBook(bookId: number, reason: string) {
+    this.skipped.push({ bookId, reason });
   }
   async knownVolume(group: BookGroup) {
     return this.known.get(group.series) ?? null;
@@ -123,6 +131,39 @@ describe('runScan', () => {
     ]);
     expect(summary).toMatchObject({ matched: 1, failed: 1, deferred: 0 });
     expect(summary.groups[0].bookFailures).toEqual([{ bookId: 2, code: 'date_mismatch', message: 'dates disagree' }]);
+  });
+
+  it('skips backup stories and extras without looking them up', async () => {
+    const store = new MemoryStore([row(1, 'Buffy Season 9 short', ''), row(2, 'Angel extra', ''), row(3, 'Cable')]);
+    const cv = fakeAdapter('comicvine', matchAll);
+
+    const summary = await runScan({ store, adapters: [cv], trigger: 'nightly' });
+
+    expect(cv.seen).toEqual(['Cable']);
+    expect(store.skipped.map((s) => [s.bookId, s.reason])).toEqual([
+      [1, 'short: not a standalone issue'],
+      [2, 'extra: not a standalone issue'],
+    ]);
+    expect(summary).toMatchObject({ matched: 1, failed: 0, skipped: 2, deferred: 0 });
+  });
+
+  it('attaches a series alias to the group', async () => {
+    const store = new MemoryStore([row(1, 'Buffy Classic')]);
+    store.aliasList = [{ alias: 'Buffy Classic', title: 'Buffy the Vampire Slayer', startYear: 1998, publisher: 'Dark Horse Comics' }];
+    let seenAlias: string | undefined;
+    const cv: SeriesAdapter = {
+      name: 'comicvine',
+      source: 'test',
+      async resolve(group) {
+        seenAlias = group.alias?.title;
+        return matchAll(group);
+      },
+      requestCounts: () => ({}),
+    };
+
+    const summary = await runScan({ store, adapters: [cv], trigger: 'nightly' });
+    expect(seenAlias).toBe('Buffy the Vampire Slayer');
+    expect(summary.groups[0].alias).toBe('Buffy the Vampire Slayer');
   });
 
   it('passes a previously matched volume to the adapter', async () => {

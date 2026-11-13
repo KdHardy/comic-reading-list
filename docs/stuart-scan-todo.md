@@ -9,13 +9,20 @@ Re-scan a fixed group:
 
 ## Logic fixes
 
-- [ ] **1. Alias: "Buffy Classic" → *Buffy the Vampire Slayer* (1998, Dark Horse)** — 62 comics
+- [x] **1. Alias: "Buffy Classic" → *Buffy the Vampire Slayer* (1998, Dark Horse)** — 62 comics
+  - Done: `stuart_series_alias` table (migration 0014), seeded with this alias. Add rows for
+    other wiki names: `insert into stuart_series_alias (alias, title, start_year, publisher) values (…);`
   - The wiki calls the 1998–2003 run "Buffy Classic". ComicVine's "Buffy the Vampire Slayer
     Classic" (2011) is a reprint line and was correctly rejected.
   - Fix: a small alias table (user text → search title), checked before searching.
     Also covers the "Buffy Classic …" variants in item 5.
 
-- [ ] **2. The right run isn't in the top 10 search results** — 21 comics, 6 groups
+- [x] **2. The right run isn't in the top 10 search results** — 21 comics, 6 groups
+  - Done: issue lookup by number + release window (±1 month, then ±1 quarter, same year), using
+    the group's highest-numbered dated comic. Live check: Batman → 2016, Black Widow → 2020,
+    Cable → 2020, both Daredevil groups → 2019.
+  - **Angel: The Hollower** (3 comics) isn't on ComicVine at all, so it stays a failure until
+    another adapter is added.
   - Batman #109–113 (2021), Black Widow #9–10, Cable #11–12, Daredevil #31–34 (two groups),
     Angel: The Hollower #1–3. Only older runs were returned (e.g. Batman 1940), so no date matched.
   - Fix: when no candidate verifies, look the issue up directly: `/issues` filtered by
@@ -39,13 +46,13 @@ Re-scan a fixed group:
     any-order word match (still date-verified); try each side of " / " separately.
 
 - [ ] **5. Format labels with no issue number** — 22 comics, 22 groups
+  - Partly done: "… short" and "… extra" (11 comics) are now `skipped` with no error, as decided.
+    One-shots, OGNs and "vol. N" (11 comics) still to do.
   - "… one-shot", "… OGN", "… short", "… extra", "… vol. 1/2" (e.g. "Angel OGN", "Buffy Season 8
     one-shot", "Buffy Season 9 short"). All have a publish date but no issue number, so there's
     nothing to verify against.
   - Fix (one-shot / OGN / vol. N): strip the label, find the volume, and accept a single-issue
     volume (or the issue) released in the same year and quarter.
-  - **Decision needed** for "short" / "extra": these look like backup stories inside other comics.
-    Skip them (new `skipped` state, no error), or match them somehow?
 
 - [ ] **6. One bad date picks the wrong run for a whole group** — 5 comics
   - "Buffy the Last Vampire Slayer": the earliest-dated comic (#3, 2021-02-09) was used to choose
@@ -62,7 +69,9 @@ Re-scan a fixed group:
 
 ## Operational
 
-- [ ] **8. ComicVine rate limit hit at 1:30 am (HTTP 420), 2 batches lost**
+- [x] **8. ComicVine rate limit hit at 1:30 am (HTTP 420), 2 batches lost**
+  - Done: each batch sums the last hour's requests from `stuart_run` and stops a resource at 180
+    per rolling hour (the batch ends as `partial` and the next one carries on).
   - Batches at 00:00, 00:30 and 01:00 made 178 per-issue requests in under an hour; ComicVine allows
     about 200 per resource per hour, so the 01:30 batch went over.
   - Fix: before each batch, sum `stuart_run.requests` for the last 60 minutes and cap each resource

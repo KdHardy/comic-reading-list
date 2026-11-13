@@ -32,7 +32,9 @@ pg_cron (every 30 min, 07:00–14:30 UTC)
   trigger. Stuart's own writes don't re-queue books.
 - At **midnight US Pacific** (`stuart_config.timezone`), `stuart_tick()` starts a
   batch if any books are pending. Nights with nothing pending make no calls.
-- Each batch is capped (~90 ComicVine requests, ~110 s). If books remain,
+- Each batch is capped (~90 ComicVine requests, ~110 s), and each ComicVine
+  resource is held under 180 requests per rolling hour across batches (from
+  `stuart_run.requests`); ComicVine itself allows about 200. If books remain,
   `stuart_tick()` starts another batch every 30 minutes until **6 am**, so a big
   backlog (like the first full scan of ~1,200 comics) finishes over a few nights.
 - A batch that hits a fatal error (e.g. a rejected API key) stops the rest of
@@ -66,11 +68,22 @@ For each group of pending books with the same series/volume/publisher text:
 4. **Check every comic:** each dated comic must be a solid date match with its
    own issue in that volume; one that isn't is recorded as a `date_mismatch`
    failure rather than attached.
-5. A series whose comics have **no publish dates** can't be confirmed and is
+5. If search didn't turn up the run, **look the issue up directly**: every issue
+   with that number released within a month (then a quarter) of the comic's
+   date, in the same year, keeping those whose volume title matches. Uses the
+   group's highest-numbered dated comic, which has the fewest namesakes.
+6. A series whose comics have **no publish dates** can't be confirmed and is
    recorded as `no_date` for review. Nothing uncertain is guessed.
-6. For a matched volume, fetch its issues to map issue numbers, its latest issue
+7. For a matched volume, fetch its issues to map issue numbers, its latest issue
    date (**ongoing** = an issue within the last 90 days or upcoming), and each
    issue's story arcs.
+
+**Aliases.** `stuart_series_alias` maps a reading-list name to the title (and
+optionally start year and publisher) to search for, e.g. the wiki's "Buffy
+Classic" → "Buffy the Vampire Slayer" (1998, Dark Horse Comics).
+
+**Skipped.** Backup stories and extras ("… short", "… extra") aren't issues of
+a series; they're marked `scan_state = 'skipped'` with no error.
 
 The user's own `book.series / volume / publisher` text is never changed (blank
 publisher and publish date are filled when that can't collide with another book).
@@ -86,6 +99,7 @@ publisher and publish date are filled when that can't collide with another book)
 | `stuart_run` | One row per batch: status, counts, requests by resource, note |
 | `stuart_scan_error` | Failures per comic, with adapter, code, message and details; `cleared_at` is set once the comic later matches |
 | `stuart_config` | Enabled flag, function URL, time zone and nightly window |
+| `stuart_series_alias` | Reading-list series names → the title/year/publisher to look up |
 
 On the Pull List, matched comics are grouped under `book_pull_list_key()`:
 the ComicVine name, start year and publisher. Status, family, order and title

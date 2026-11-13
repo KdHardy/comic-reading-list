@@ -191,7 +191,8 @@ describe('ComicVineAdapter', () => {
       { knownSourceId: null, knownStorylineIds: new Set() }
     );
 
-    expect(calls.map((c) => c.pathname)).toEqual(['/api/search/', '/api/volumes/']);
+    // Search, name filter, then the issue lookup (store and cover date, ±1 month then ±1 quarter).
+    expect(calls.map((c) => c.pathname)).toEqual(['/api/search/', '/api/volumes/', ...Array(4).fill('/api/issues/')]);
     expect(result).toMatchObject({ kind: 'failed', code: 'no_candidates' });
   });
 
@@ -207,6 +208,85 @@ describe('ComicVineAdapter', () => {
       { knownSourceId: null, knownStorylineIds: new Set() }
     );
     expect(result.kind === 'matched' && result.volume.name).toBe('Buffy the Vampire Slayer Season Nine');
+  });
+
+  it('searches by the alias title', async () => {
+    const { fetchFn, calls } = fakeComicVine({ 'search/': () => [] , 'volumes/': () => [] });
+    await adapter(fetchFn).resolve(
+      {
+        series: 'Buffy Classic',
+        volume: null,
+        publisher: 'Dark Horse Comics',
+        books: [{ bookId: 1, number: '1', publishDate: null }],
+        alias: { alias: 'Buffy Classic', title: 'Buffy the Vampire Slayer', startYear: 1998, publisher: 'Dark Horse Comics' },
+      },
+      { knownSourceId: null, knownStorylineIds: new Set() }
+    );
+    expect(calls[0].searchParams.get('query')).toBe('Buffy the Vampire Slayer');
+  });
+
+  it('looks the issue up by number and date when search misses the run', async () => {
+    const batman2016 = { id: 91273, name: 'Batman', start_year: '2016', publisher: { name: 'DC Comics' }, count_of_issues: 160, last_issue: { issue_number: '160' }, site_detail_url: 'cv/91273' };
+    const { fetchFn, calls } = fakeComicVine({
+      'search/': () => [{ id: 796, name: 'Batman', start_year: '1940', publisher: { name: 'DC Comics' }, count_of_issues: 713, last_issue: null, site_detail_url: null }],
+      'issues/': (url) => {
+        const filter = url.searchParams.get('filter')!;
+        if (filter === 'volume:796,issue_number:109') return [{ id: 1, issue_number: '109', store_date: '1957-08-01', cover_date: null }];
+        if (filter.startsWith('issue_number:109,store_date:2021-05-01 00:00:00|2021-07-02 23:59:59')) {
+          return [
+            { id: 5, issue_number: '109', store_date: '2021-04-20', cover_date: null, volume: { id: 35462, name: 'Scooby-Doo, Where Are You?' } },
+            { id: 856435, issue_number: '109', store_date: '2021-06-01', cover_date: '2021-08-01', volume: { id: 91273, name: 'Batman' } },
+          ];
+        }
+        if (filter === 'volume:91273') return [{ id: 856435, issue_number: '109', store_date: '2021-06-01', cover_date: '2021-08-01' }];
+        return [];
+      },
+      'volume/4050-91273/': () => batman2016,
+      'issue/4000-856435/': () => ({ id: 856435, story_arc_credits: [] }),
+    });
+
+    const result = await adapter(fetchFn).resolve(
+      { series: 'Batman', volume: null, publisher: 'DC Comics', books: [{ bookId: 1, number: '109', publishDate: '2021-06-01' }] },
+      { knownSourceId: null, knownStorylineIds: new Set() }
+    );
+
+    expect(result.kind === 'matched' && [result.volume.sourceId, result.volume.startYear]).toEqual(['91273', 2016]);
+    expect(result.kind === 'matched' && result.issues.map((i) => i.sourceIssueId)).toEqual(['856435']);
+    expect(calls.some((c) => c.pathname.endsWith('/volume/4050-91273/'))).toBe(true);
+  });
+
+  it('reports the issue lookup when it finds nothing either', async () => {
+    const routes = catwomanRoutes();
+    routes['issues/'] = (url) => {
+      const filter = url.searchParams.get('filter')!;
+      if (filter.startsWith('issue_number:')) return [];
+      return [{ id: 1, issue_number: '31', store_date: '2019-01-01', cover_date: null }];
+    };
+    const { fetchFn } = fakeComicVine(routes);
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+
+    expect(result).toMatchObject({ kind: 'failed', code: 'no_date_match' });
+    if (result.kind === 'failed') {
+      const lookup = (result.details as { issue_lookup: { issue_number: string; tries: { field: string; window: string[] }[] } }).issue_lookup;
+      // Looked up by the highest-numbered comic (#32), a month either side, then a quarter.
+      expect(lookup.issue_number).toBe('32');
+      expect(lookup.tries.map((t) => [t.field, ...t.window])).toEqual([
+        ['store_date', '2021-05-15', '2021-07-16'],
+        ['cover_date', '2021-05-15', '2021-07-16'],
+        ['store_date', '2021-03-15', '2021-09-15'],
+        ['cover_date', '2021-03-15', '2021-09-15'],
+      ]);
+    }
+  });
+
+  it('stops before going over the hourly limit for a resource', async () => {
+    const { fetchFn } = fakeComicVine(catwomanRoutes());
+    const error = await adapter(fetchFn, { remainingByResource: { search: 0 } })
+      .resolve(group, { knownSourceId: null, knownStorylineIds: new Set() })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(StopRun);
+    expect(error).toMatchObject({ code: 'budget_exhausted', fatal: false });
+    expect((error as Error).message).toMatch(/hourly ComicVine limit for "search"/);
   });
 
   it('stops the batch on a rejected API key', async () => {
