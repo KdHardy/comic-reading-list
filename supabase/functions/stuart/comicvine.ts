@@ -9,6 +9,7 @@
 import {
   StopRun,
   type AdapterContext,
+  type BookFailure,
   type GroupResult,
   type IssueMatch,
   type SeriesAdapter,
@@ -16,7 +17,8 @@ import {
   type VolumeInfo,
 } from './adapter.ts';
 import {
-  datesAgree,
+  compareDates,
+  DATE_WINDOW_DAYS,
   earliestPublishDate,
   filterCandidates,
   isOngoing,
@@ -30,7 +32,7 @@ const BASE_URL = 'https://comicvine.gamespot.com/api';
 const USER_AGENT = 'ComicReadingList-Stuart/1.0 (personal reading-list metadata agent)';
 const VOLUME_FIELDS = 'id,name,start_year,publisher,count_of_issues,last_issue,site_detail_url';
 const ISSUE_LIST_FIELDS = 'id,issue_number,store_date,cover_date';
-const MAX_VERIFY_CANDIDATES = 3;
+const MAX_VERIFY_CANDIDATES = 5;
 
 export interface ComicVineOptions {
   apiKey: string;
@@ -285,43 +287,45 @@ export class ComicVineAdapter implements SeriesAdapter {
         };
       }
 
+      // A solid match needs the comic's name, issue number AND date: the issue
+      // must have come out in the same year and within about a quarter.
       const probe = pickProbeBook(group);
-      let match: VolumeCandidate | null = null;
       if (!probe) {
-        // A loose title match is only trusted once an issue date confirms it.
-        if (candidates.length === 1 && !loose) match = candidates[0];
-        else {
-          return {
-            kind: 'failed',
-            code: 'ambiguous',
-            message: loose
-              ? `"${group.series}" only loosely matches ComicVine titles, and the comics have no publish date to confirm one.`
-              : `${candidates.length} ComicVine volumes fit "${group.series}" and the comics have no publish date to tell them apart.`,
-            details: { candidates: candidates.slice(0, 10).map(summary) },
-          };
+        return {
+          kind: 'failed',
+          code: 'no_date',
+          message: `None of the "${group.series}" comics has both an issue number and a publish date, so no ComicVine volume can be confirmed.`,
+          details: { loose_title_match: loose, candidates: candidates.slice(0, 10).map(summary) },
+        };
+      }
+
+      const checked: { candidate: VolumeCandidate; issue: string | null; release_date: string | null; days: number | null; solid: boolean }[] = [];
+      let match: VolumeCandidate | null = null;
+      let best = Number.POSITIVE_INFINITY;
+      for (const candidate of candidates.slice(0, MAX_VERIFY_CANDIDATES)) {
+        const issue = await this.issueDates(candidate.sourceId, probe.number!);
+        const dates = compareDates(probe.publishDate, issue?.store_date ?? null, issue?.cover_date ?? null);
+        checked.push({ candidate, issue: issue ? String(issue.id) : null, release_date: dates.releaseDate, days: dates.days, solid: dates.solid });
+        if (dates.solid && dates.days! < best) {
+          match = candidate;
+          best = dates.days!;
+          if (best <= 7) break; // can't do better than the same week
         }
-      } else {
-        for (const candidate of candidates.slice(0, MAX_VERIFY_CANDIDATES)) {
-          const issue = await this.issueDates(candidate.sourceId, probe.number!);
-          if (issue && datesAgree(probe.publishDate, issue.store_date, issue.cover_date)) {
-            match = candidate;
-            break;
-          }
-        }
-        if (!match) {
-          return {
-            kind: 'failed',
-            code: 'no_date_match',
-            message: `No ComicVine volume of "${group.series}" has #${probe.number} published near ${probe.publishDate}.`,
-            details: {
-              checked_issue: probe.number,
-              publish_date: probe.publishDate,
-              earliest_publish_date: earliestPublishDate(group.books),
-              candidates: candidates.slice(0, MAX_VERIFY_CANDIDATES).map(summary),
-              other_candidates: candidates.slice(MAX_VERIFY_CANDIDATES, 10).map(summary),
-            },
-          };
-        }
+      }
+      if (!match) {
+        return {
+          kind: 'failed',
+          code: 'no_date_match',
+          message: `No ComicVine volume of "${group.series}" has #${probe.number} released in ${probe.publishDate!.slice(0, 4)} within ${DATE_WINDOW_DAYS} days of ${probe.publishDate}.`,
+          details: {
+            checked_issue: probe.number,
+            publish_date: probe.publishDate,
+            earliest_publish_date: earliestPublishDate(group.books),
+            loose_title_match: loose,
+            checked: checked.map((c) => ({ ...summary(c.candidate), issue_id: c.issue, release_date: c.release_date, days_apart: c.days })),
+            other_candidates: candidates.slice(MAX_VERIFY_CANDIDATES, 10).map(summary),
+          },
+        };
       }
       chosen = volumes.find((v) => String(v.id) === match!.sourceId) ?? null;
       if (!chosen) {
@@ -356,6 +360,7 @@ export class ComicVineAdapter implements SeriesAdapter {
     };
 
     const matched: IssueMatch[] = [];
+    const bookFailures: BookFailure[] = [];
     const deferredBookIds: number[] = [];
     for (const book of group.books) {
       const n = normalizeIssueNumber(book.number);
@@ -364,6 +369,27 @@ export class ComicVineAdapter implements SeriesAdapter {
         matched.push({ bookId: book.bookId, sourceIssueId: null, publishDate: null, storylines: [] });
         continue;
       }
+
+      // Every dated comic must line up with its own issue, not just the one
+      // used to pick the volume.
+      const dates = compareDates(book.publishDate, issue.store_date, issue.cover_date);
+      if (book.publishDate && !dates.solid) {
+        bookFailures.push({
+          bookId: book.bookId,
+          code: 'date_mismatch',
+          message: `${volume.name} (${volume.startYear ?? '?'}) #${issue.issue_number} came out ${dates.releaseDate ?? 'on an unknown date'}, not within ${DATE_WINDOW_DAYS} days of ${book.publishDate} in the same year.`,
+          details: {
+            volume: { id: volumeId, name: volume.name, start_year: volume.startYear, url: volume.siteUrl },
+            issue_id: String(issue.id),
+            store_date: issue.store_date,
+            cover_date: issue.cover_date,
+            publish_date: book.publishDate,
+            days_apart: dates.days,
+          },
+        });
+        continue;
+      }
+
       try {
         const storylines = await this.storylinesFor(String(issue.id), context);
         matched.push({
@@ -381,6 +407,6 @@ export class ComicVineAdapter implements SeriesAdapter {
       }
     }
 
-    return { kind: 'matched', volume, issues: matched, deferredBookIds };
+    return { kind: 'matched', volume, issues: matched, bookFailures, deferredBookIds };
   }
 }

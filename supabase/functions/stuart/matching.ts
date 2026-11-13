@@ -192,19 +192,44 @@ export function daysBetween(a: string, b: string): number {
   return Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
 }
 
-/** Store and cover dates can differ by a couple of months; allow 75 days. */
-export const DATE_TOLERANCE_DAYS = 75;
+/** How far a release date may be from the reading-list date: about a quarter. */
+export const DATE_WINDOW_DAYS = 92;
+/** Cover dates usually run about two months after the release (store) date. */
+export const COVER_DATE_LEAD_DAYS = 60;
 
-export function datesAgree(bookDate: string | null, storeDate: string | null, coverDate: string | null): boolean {
-  if (!bookDate) return false;
-  return [storeDate, coverDate].some((d) => d != null && daysBetween(bookDate, d) <= DATE_TOLERANCE_DAYS);
+export interface DateMatch {
+  /** Same year and within about a quarter: a solid match. */
+  solid: boolean;
+  /** Days between the reading-list date and the (estimated) release date. */
+  days: number | null;
+  basis: 'store' | 'cover' | null;
+  releaseDate: string | null;
 }
 
-/** The book in a group best suited to verify a candidate volume: dated and numbered. */
+function shiftDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Compare a comic's reading-list date with a database issue's release date
+ * (the store date, or the cover date moved back two months when that's all
+ * there is). A solid match is in the same year and within about a quarter.
+ */
+export function compareDates(bookDate: string | null, storeDate: string | null, coverDate: string | null): DateMatch {
+  const basis = storeDate ? 'store' : coverDate ? 'cover' : null;
+  const releaseDate = storeDate ?? (coverDate ? shiftDays(coverDate, -COVER_DATE_LEAD_DAYS) : null);
+  if (!bookDate || !releaseDate) return { solid: false, days: null, basis, releaseDate };
+  const days = daysBetween(bookDate, releaseDate);
+  const solid = yearOf(bookDate) === yearOf(releaseDate) && days <= DATE_WINDOW_DAYS;
+  return { solid, days, basis, releaseDate };
+}
+
+/** The book in a group used to verify candidate volumes: the earliest dated, numbered one. */
 export function pickProbeBook(group: BookGroup): GroupBook | null {
   return (
-    group.books.find((b) => b.publishDate && normalizeIssueNumber(b.number)) ??
-    null
+    group.books
+      .filter((b) => b.publishDate && normalizeIssueNumber(b.number))
+      .sort((a, b) => a.publishDate!.localeCompare(b.publishDate!))[0] ?? null
   );
 }
 

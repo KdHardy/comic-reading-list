@@ -40,21 +40,32 @@ pg_cron (every 30 min, 07:00–14:30 UTC)
 
 ## Matching (ComicVine adapter)
 
+A comic is matched on its **name, issue number and reading-list date** together.
+A date match is **solid** when the issue's release date (ComicVine's store date,
+or its cover date moved back two months when that's all there is) is in the
+**same year** as the reading-list date and within **92 days** (about a quarter).
+
 For each group of pending books with the same series/volume/publisher text:
 
 1. Reuse the ComicVine volume already matched for that group, if any.
-2. Otherwise find volumes by name (`/volumes?filter=name:…`, falling back to
-   `/search`), then keep ones whose **title** matches (ignoring case,
-   punctuation, a leading "The"), whose **publisher** matches loosely
-   ("Marvel" = "Marvel Comics"), that **started** on or before the comic's
-   publish date (and in the volume's year, if the book has a year-style volume),
+2. Otherwise search ComicVine for volumes (`/search`, which ranks exact titles
+   first; the substring `/volumes?filter=name:…` is a fallback). Keep volumes
+   whose **title** matches, ignoring case, punctuation, a leading "The" and
+   spelled-out numbers ("Season Eleven" = "Season 11"). If none match exactly,
+   a looser in-order word match is allowed ("Buffy Season 9" ~ "Buffy the
+   Vampire Slayer Season Nine"). Then keep those whose **publisher** matches
+   loosely ("Marvel" = "Marvel Comics"), that **started** on or before the
+   comic's date (and in the volume's year, if the book has a year-style volume),
    and that are long enough for the issue numbers.
-3. **Verify** the newest few candidates: the comic's issue number in that volume
-   must have a store or cover date within 75 days of the book's publish date.
-   Undated books are matched only when exactly one candidate is left.
-4. Anything not confidently matched is recorded as a **scan failure** with the
-   candidates and reasons, for review — Stuart doesn't guess.
-5. For a matched volume, fetch its issues to map issue numbers, its latest issue
+3. **Pick the volume by date:** for the earliest dated comic, look up its issue
+   number in up to 5 candidate volumes and take the one whose release date is a
+   solid match and closest.
+4. **Check every comic:** each dated comic must be a solid date match with its
+   own issue in that volume; one that isn't is recorded as a `date_mismatch`
+   failure rather than attached.
+5. A series whose comics have **no publish dates** can't be confirmed and is
+   recorded as `no_date` for review. Nothing uncertain is guessed.
+6. For a matched volume, fetch its issues to map issue numbers, its latest issue
    date (**ongoing** = an issue within the last 90 days or upcoming), and each
    issue's story arcs.
 

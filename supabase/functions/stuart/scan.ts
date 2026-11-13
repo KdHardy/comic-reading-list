@@ -64,6 +64,7 @@ export interface GroupReport {
   issuesWithoutSourceIssue?: number;
   storylines?: string[];
   errors?: ScanError[];
+  bookFailures?: { bookId: number; code: string; message: string }[];
 }
 
 export interface ScanSummary {
@@ -132,18 +133,26 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
       }
 
       const v = result.volume;
-      report.outcome = result.deferredBookIds.length === group.books.length ? 'deferred' : 'matched';
+      report.outcome =
+        result.issues.length > 0 ? 'matched' : result.deferredBookIds.length > 0 ? 'deferred' : 'failed';
       report.adapter = winner.name;
       report.volumeMatch = { name: v.name, startYear: v.startYear, publisher: v.publisher, sourceId: v.sourceId, url: v.siteUrl };
       report.issuesMatched = result.issues.length;
+      if (result.bookFailures.length > 0) {
+        report.bookFailures = result.bookFailures.map((f) => ({ bookId: f.bookId, code: f.code, message: f.message }));
+      }
       report.issuesWithoutSourceIssue = result.issues.filter((i) => !i.sourceIssueId).length;
       report.storylines = [...new Set(result.issues.flatMap((i) => i.storylines.map((s) => s.name)))];
       matched += result.issues.length;
+      failed += result.bookFailures.length;
 
       if (!dryRun) {
         const seriesVolumeId = await store.upsertVolume(v);
         for (const issue of result.issues) {
           await store.applyMatch(issue.bookId, seriesVolumeId, issue.sourceIssueId, issue.publishDate, issue.storylines);
+        }
+        for (const f of result.bookFailures) {
+          await store.recordFailure(runId!, f.bookId, [{ adapter: winner.name, code: f.code, message: f.message, details: f.details }]);
         }
       }
 

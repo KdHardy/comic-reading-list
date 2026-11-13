@@ -75,6 +75,7 @@ const matchAll = (group: BookGroup): GroupResult => ({
   kind: 'matched',
   volume: volume(group.series),
   issues: group.books.map((b) => ({ bookId: b.bookId, sourceIssueId: `i${b.bookId}`, publishDate: null, storylines: [] })),
+  bookFailures: [],
   deferredBookIds: [],
 });
 
@@ -104,6 +105,24 @@ describe('runScan', () => {
       { bookId: 2, errors: expect.any(Array) },
     ]);
     expect(summary).toMatchObject({ status: 'completed', matched: 0, failed: 2 });
+  });
+
+  it('records comics in a matched group that failed their own check', async () => {
+    const store = new MemoryStore([row(1, 'Cable', '11'), row(2, 'Cable', '12')]);
+    const cv = fakeAdapter('comicvine', (group) => ({
+      ...(matchAll(group) as GroupResult & { kind: 'matched' }),
+      issues: [{ bookId: 1, sourceIssueId: 'i1', publishDate: null, storylines: [] }],
+      bookFailures: [{ bookId: 2, code: 'date_mismatch', message: 'dates disagree' }],
+    }));
+
+    const summary = await runScan({ store, adapters: [cv], trigger: 'nightly' });
+
+    expect(store.matches.map((m) => m.bookId)).toEqual([1]);
+    expect(store.failures).toEqual([
+      { bookId: 2, errors: [{ adapter: 'comicvine', code: 'date_mismatch', message: 'dates disagree', details: undefined }] },
+    ]);
+    expect(summary).toMatchObject({ matched: 1, failed: 1, deferred: 0 });
+    expect(summary.groups[0].bookFailures).toEqual([{ bookId: 2, code: 'date_mismatch', message: 'dates disagree' }]);
   });
 
   it('passes a previously matched volume to the adapter', async () => {

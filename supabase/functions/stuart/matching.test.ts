@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  datesAgree,
+  compareDates,
   filterCandidates,
   groupBooks,
   isOngoing,
@@ -162,11 +162,23 @@ describe('filterCandidates', () => {
 });
 
 describe('dates', () => {
-  it('accepts a store or cover date within 75 days', () => {
-    expect(datesAgree('2021-05-18', '2021-05-18', '2021-07-01')).toBe(true);
-    expect(datesAgree('2021-05-18', null, '2021-07-01')).toBe(true);
-    expect(datesAgree('2021-05-18', '2011-05-18', '2011-07-01')).toBe(false);
-    expect(datesAgree(null, '2021-05-18', null)).toBe(false);
+  it('needs the same year and about a quarter for a solid date match', () => {
+    expect(compareDates('2021-05-18', '2021-05-18', '2021-07-01')).toMatchObject({ solid: true, days: 0, basis: 'store' });
+    expect(compareDates('2021-05-18', '2021-08-10', null)).toMatchObject({ solid: true, days: 84 });
+    expect(compareDates('2021-05-18', '2021-09-01', null)).toMatchObject({ solid: false, days: 106 });
+    // Within a quarter but across a year boundary is not solid.
+    expect(compareDates('2021-12-29', '2022-01-05', null)).toMatchObject({ solid: false, days: 7 });
+    expect(compareDates('2021-05-18', '2011-05-18', null).solid).toBe(false);
+    expect(compareDates(null, '2021-05-18', null).solid).toBe(false);
+  });
+
+  it('moves a cover date back two months when there is no store date', () => {
+    expect(compareDates('2021-05-18', null, '2021-07-01')).toMatchObject({
+      solid: true,
+      basis: 'cover',
+      releaseDate: '2021-05-02',
+    });
+    expect(compareDates('2021-05-18', null, null)).toMatchObject({ solid: false, basis: null, releaseDate: null });
   });
 
   it('calls a run ongoing when its latest issue is recent or upcoming', () => {

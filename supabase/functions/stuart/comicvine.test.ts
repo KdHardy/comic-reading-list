@@ -102,8 +102,9 @@ describe('ComicVineAdapter', () => {
       { bookId: 2, sourceIssueId: '32', publishDate: '2021-06-15', storylines: [] },
     ]);
     expect(result.deferredBookIds).toEqual([]);
+    expect(result.bookFailures).toEqual([]);
 
-    // The newest run (2018) is checked first and agrees, so 2011 is never fetched.
+    // The newest run (2018) is checked first and agrees within a week, so 2011 is never fetched.
     expect(calls.some((c) => c.searchParams.get('filter') === 'volume:100,issue_number:31')).toBe(false);
     expect(calls.every((c) => c.searchParams.get('api_key') === 'test-key' && c.searchParams.get('format') === 'json')).toBe(true);
   });
@@ -119,16 +120,65 @@ describe('ComicVineAdapter', () => {
     expect(calls.some((c) => c.pathname.includes('story_arc'))).toBe(false);
   });
 
-  it('fails with the candidates when no volume has the issue near its date', async () => {
+  it('fails with the checked candidates when no volume has the issue in the same year and quarter', async () => {
     const routes = catwomanRoutes();
-    routes['issues/'] = () => [{ id: 1, issue_number: '31', store_date: '1990-01-01', cover_date: null }];
+    routes['issues/'] = () => [{ id: 1, issue_number: '31', store_date: '2021-10-20', cover_date: null }];
     const { fetchFn } = fakeComicVine(routes);
     const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
 
     expect(result).toMatchObject({ kind: 'failed', code: 'no_date_match' });
     if (result.kind === 'failed') {
-      expect((result.details as { candidates: { id: string }[] }).candidates.map((c) => c.id)).toEqual(['200', '100']);
+      const checked = (result.details as { checked: { id: string; days_apart: number }[] }).checked;
+      expect(checked.map((c) => [c.id, c.days_apart])).toEqual([['200', 155], ['100', 155]]);
     }
+  });
+
+  it('picks the candidate whose issue date is closest', async () => {
+    const routes = catwomanRoutes();
+    const verify = routes['issues/'];
+    routes['issues/'] = (url) => {
+      const filter = url.searchParams.get('filter')!;
+      if (filter === 'volume:200,issue_number:31') return [{ id: 31, issue_number: '31', store_date: '2021-07-20', cover_date: null }];
+      if (filter === 'volume:100,issue_number:31') return [{ id: 9, issue_number: '31', store_date: '2021-05-19', cover_date: null }];
+      if (filter === 'volume:100') return [{ id: 9, issue_number: '31', store_date: '2021-05-19', cover_date: null }];
+      return verify(url);
+    };
+    routes['issue/4000-9/'] = () => ({ id: 9, story_arc_credits: [] });
+    const { fetchFn } = fakeComicVine(routes);
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+
+    expect(result.kind === 'matched' && result.volume.sourceId).toBe('100');
+  });
+
+  it('reports a comic whose own date disagrees with its issue instead of attaching it', async () => {
+    const routes = catwomanRoutes();
+    const base = routes['issues/'];
+    routes['issues/'] = (url) =>
+      url.searchParams.get('filter') === 'volume:200'
+        ? [
+            { id: 31, issue_number: '31', store_date: '2021-05-18', cover_date: null },
+            { id: 32, issue_number: '32', store_date: '2022-03-01', cover_date: null },
+          ]
+        : base(url);
+    const { fetchFn } = fakeComicVine(routes);
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.issues.map((i) => i.bookId)).toEqual([1]);
+    expect(result.bookFailures).toEqual([
+      expect.objectContaining({ bookId: 2, code: 'date_mismatch', details: expect.objectContaining({ store_date: '2022-03-01' }) }),
+    ]);
+  });
+
+  it('does not match a series whose comics have no publish date', async () => {
+    const { fetchFn, calls } = fakeComicVine(catwomanRoutes());
+    const result = await adapter(fetchFn).resolve(
+      { ...group, books: [{ bookId: 1, number: '31', publishDate: null }] },
+      { knownSourceId: null, knownStorylineIds: new Set() }
+    );
+    expect(result).toMatchObject({ kind: 'failed', code: 'no_date' });
+    expect(calls.map((c) => c.pathname)).toEqual(['/api/search/']);
   });
 
   it('falls back to the name filter and reports when nothing has a matching title', async () => {
@@ -145,14 +195,18 @@ describe('ComicVineAdapter', () => {
     expect(result).toMatchObject({ kind: 'failed', code: 'no_candidates' });
   });
 
-  it('only accepts a loose title match once an issue date confirms it', async () => {
+  it('confirms a loose title match with the issue date', async () => {
     const buffy = { id: 42820, name: 'Buffy the Vampire Slayer Season Nine', start_year: '2011', publisher: { name: 'Dark Horse Comics' }, count_of_issues: 25, last_issue: null, site_detail_url: null };
-    const { fetchFn } = fakeComicVine({ 'search/': () => [buffy], 'issues/': () => [] });
-    const undated = await adapter(fetchFn).resolve(
-      { series: 'Buffy Season 9', volume: null, publisher: 'Dark Horse Comics', books: [{ bookId: 1, number: '1', publishDate: null }] },
+    const { fetchFn } = fakeComicVine({
+      'search/': () => [buffy],
+      'issues/': () => [{ id: 7, issue_number: '1', store_date: '2011-09-14', cover_date: null }],
+      'issue/4000-7/': () => ({ id: 7, story_arc_credits: [] }),
+    });
+    const result = await adapter(fetchFn).resolve(
+      { series: 'Buffy Season 9', volume: null, publisher: 'Dark Horse Comics', books: [{ bookId: 1, number: '1', publishDate: '2011-09-14' }] },
       { knownSourceId: null, knownStorylineIds: new Set() }
     );
-    expect(undated).toMatchObject({ kind: 'failed', code: 'ambiguous' });
+    expect(result.kind === 'matched' && result.volume.name).toBe('Buffy the Vampire Slayer Season Nine');
   });
 
   it('stops the batch on a rejected API key', async () => {

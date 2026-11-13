@@ -32,11 +32,20 @@ export interface IssueMatch {
   storylines: StorylineInfo[];
 }
 
+/** A comic in a matched group that didn't line up with its own issue (e.g. the dates disagree). */
+export interface BookFailure {
+  bookId: number;
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
 export type GroupResult =
   | {
       kind: 'matched';
       volume: VolumeInfo;
       issues: IssueMatch[];
+      bookFailures: BookFailure[];
       /** Books left for a later batch because the request budget ran out. */
       deferredBookIds: number[];
     }
