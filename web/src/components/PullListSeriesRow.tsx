@@ -149,6 +149,12 @@ export function PullListSeriesRow({
 
       <div role="cell" className="pull-list-total">
         {series.totalIssues}
+        {(series.runIssueCount != null || series.isOngoing != null) && (
+          <span className="pull-list-run" title="From ComicVine, via Stuart">
+            {series.runIssueCount != null && `of ${series.runIssueCount}`}
+            {series.isOngoing && <span className="pull-list-ongoing">Ongoing</span>}
+          </span>
+        )}
       </div>
 
       <div role="cell" className="pull-list-read" data-total={series.totalIssues}>

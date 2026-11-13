@@ -28,6 +28,7 @@ Routing is hash-based in `web/src/App.tsx`: `window.location.hash === '#/pull-li
 
 - **Status** filter: All · Read All · Maybe · Skip · No status
 - Summary line: `{N} series · {read} / {total} issues read` for the filtered set
+- When Stuart has open scan failures, a link under the summary: **"{N} recent scans failed. Click for error conditions."** — opens a dialog listing each comic's errors (see [stuart-metadata-agent.md](./stuart-metadata-agent.md))
 
 ### Table columns
 
@@ -39,7 +40,7 @@ Routing is hash-based in `web/src/App.tsx`: `window.location.hash === '#/pull-li
 | Title Art | Cropped cover band; click to open the title-art editor |
 | Series Title | Series name; volume shown in parentheses when present |
 | Volume | Volume string, or — |
-| Total Issues | Distinct issues for that series across all lists |
+| Total Issues | Distinct issues for that series across all lists; once Stuart has matched the series, also "of N" (issues in the whole run) and an **Ongoing** badge |
 | Issues Read | Count of completed issues plus a progress bar |
 | Status | — · Read All · Maybe · Skip |
 
@@ -74,6 +75,8 @@ If no cover is chosen, the UI uses the first issue that has a thumbnail and crop
 
 Same keying as book dedupe for series identity: `(series, volume, publisher)`, with null volume/publisher normalized to `''` on the Pull List side.
 
+Once [Stuart](./stuart-metadata-agent.md) has matched a comic to a ComicVine series/volume, it is grouped under that instead: the ComicVine name, start year (as the volume) and publisher. This lets comics typed differently ("Marvel" vs "Marvel Comics", no volume vs "2020") land on one row. `issueSeriesKey()` in `web/src/lib/pullList.ts` and the SQL function `book_pull_list_key()` implement the same rule. Status, family, order and title art set on the old key are carried over when a group moves.
+
 ### Derived from reading lists (read-time)
 
 Issues are loaded from every `list_entry` of type `book`, joined to `book`. Client code (`buildPullListSeries` in `web/src/lib/pullList.ts`) groups by series key, **de-duplicates by `book_id`** (a book on multiple lists counts once), sorts issues by publish date then issue number, and computes:
@@ -104,6 +107,8 @@ Rows are created **lazily** the first time a series is edited (status, family, t
 | `list_entry` | Source of which books appear on any list |
 | `book` | Series fields, thumbnails, `completed` |
 | `pull_list_series` | Pull List–only metadata |
+| `series_volume` | Stuart's canonical series/volume (run size, ongoing) |
+| `stuart_scan_error` | Open scan failures shown from the summary line |
 | `reading_list` | Not queried by the Pull List page itself |
 
 ## Client API surface

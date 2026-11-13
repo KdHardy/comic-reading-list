@@ -83,7 +83,9 @@ erDiagram
 | `0003_security.sql` | RLS policies (SELECT-only for anon) | ✅ |
 | `0004_remove_book_from_list.sql` | `remove_book_from_list` RPC + revert upsert fix | ✅ |
 | `0005_notes.sql` | `note` table + `add_note` / `update_note` / `delete_note` RPCs | ✅ |
-| `0011_pull_list.sql` | `pull_list_series` table + status / family / title art / reorder RPCs | ⏳ Apply before deploying |
+| `0011_pull_list.sql` | `pull_list_series` table + status / family / title art / reorder RPCs | ✅ |
+| `0012_stuart_metadata.sql` | Stuart: `series_volume`, storylines, scan state on `book`, runs, errors, config | ✅ |
+| `0013_stuart_schedule.sql` | Stuart: pg_cron + pg_net nightly schedule (`stuart_tick`) | ✅ |
 
 ---
 
@@ -137,8 +139,24 @@ erDiagram
 - [x] Family: free-text with autocomplete from families already in use
 - [x] Title art: pick a cover and drag-crop the logo; defaults to the top band of the first cover
 - [x] Priority ordering (drag, up/down), persisted
+- [x] Series grouped by Stuart's canonical ComicVine series/volume, with run size and Ongoing badge
+- [x] "N recent scans failed" link with an error dialog
 - [ ] Family auto-detection from an external source (ComicVine / League of Comic Geeks — TBD)
-- [ ] Storylines view
+- [ ] Storylines view (data is collected by Stuart)
+
+### Stuart — comic metadata agent
+
+See [docs/stuart-metadata-agent.md](docs/stuart-metadata-agent.md).
+
+- [x] Supabase Edge Function with a pluggable adapter chain (ComicVine first)
+- [x] Match each comic to a series/volume (title, publisher, year, issue-date verification)
+- [x] Series/volume metadata: total issues, ongoing, publisher, dates; fill blank book publisher/date
+- [x] Story arcs per issue (`storyline`, `book_storyline`)
+- [x] Scans only new/changed comics; nightly at midnight Pacific, batched under ComicVine's rate limits
+- [x] Failures recorded per comic, retried after a week (max 3), shown on the Pull List
+- [ ] More adapters (League of Comic Geeks, GCD)
+- [ ] Reading-order positions from articles/wikis
+- [ ] Commands to rescan one comic or everything
 
 ### Browser extension
 

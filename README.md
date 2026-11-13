@@ -175,6 +175,11 @@ See `supabase/migrations/0001_init_schema.sql` for the full definitions. Summary
 - `pull_list_series` — per-series Pull List metadata keyed by `(series, volume, publisher)`: family,
   status (Read All / Maybe / Skip), priority order, and the cover + crop used as title art; see
   `0011_pull_list.sql`. Issue totals and read counts are derived from `list_entry` + `book`.
+- `series_volume`, `storyline`, `book_storyline`, `stuart_run`, `stuart_scan_error`, `stuart_config` —
+  written by **Stuart**, the nightly metadata agent (a Supabase Edge Function that matches comics to
+  ComicVine series/volumes and story arcs); see `0012_stuart_metadata.sql`,
+  `0013_stuart_schedule.sql` and [docs/stuart-metadata-agent.md](docs/stuart-metadata-agent.md)
+  for setup (it needs a ComicVine API key).
 - `app_secret` — single-row table holding the shared write secret; never exposed via the REST API
 
 All writes go through the RPC functions in the migrations (`add_book_to_list`,

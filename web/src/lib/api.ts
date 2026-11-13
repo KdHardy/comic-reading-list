@@ -11,6 +11,7 @@ import {
   type PullListStatus,
   type ReadingListSummary,
   type SeriesKey,
+  type StuartScanError,
   type TitleArtCrop,
 } from './types';
 
@@ -275,7 +276,8 @@ export async function saveBookThumbnail(bookId: number, blob: Blob): Promise<voi
 
 const PULL_LIST_ISSUE_FIELDS = `
   book_id, publisher, series, volume, number, publish_date,
-  thumbnail, thumbnail_cached_at, completed
+  thumbnail, thumbnail_cached_at, completed,
+  series_volume:series_volume_id(series_volume_id, name, start_year, publisher, count_of_issues, is_ongoing, site_url)
 `;
 
 /** Every book on any list (once per list it appears on), for rolling up into series. */
@@ -349,4 +351,16 @@ export async function reorderPullListSeries(keysInOrder: SeriesKey[]): Promise<v
     p_series_keys: keysInOrder.map(({ series, volume, publisher }) => ({ series, volume, publisher })),
   });
   if (error) throw error;
+}
+
+/** Stuart scan failures that haven't been resolved by a later match. */
+export async function fetchOpenStuartErrors(): Promise<StuartScanError[]> {
+  const { data, error } = await supabase
+    .from('stuart_scan_error')
+    .select('error_id, book_id, series, volume, publisher, number, adapter, code, message, details, created_at')
+    .is('cleared_at', null)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return (data ?? []) as StuartScanError[];
 }
