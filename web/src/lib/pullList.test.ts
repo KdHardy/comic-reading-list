@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TITLE_ART_CROP,
   buildPullListSeries,
+  failedScanCount,
   familyOptions,
   filterPullListSeries,
   formatSeriesTitle,
@@ -182,5 +183,46 @@ describe('crop helpers', () => {
   it('rejects crops too small to be intentional', () => {
     expect(isUsableCrop({ x: 0, y: 0, w: 0.5, h: 0.01 })).toBe(false);
     expect(isUsableCrop({ x: 0, y: 0, w: 1, h: 0.2 })).toBe(true);
+  });
+});
+
+describe('Stuart matches', () => {
+  const sv = {
+    series_volume_id: 7,
+    name: 'X-Factor',
+    start_year: 2020,
+    publisher: 'Marvel',
+    count_of_issues: 10,
+    is_ongoing: false,
+    site_url: 'https://comicvine.gamespot.com/x-factor/4050-1/',
+  };
+
+  it('groups matched issues under the canonical series/volume, whatever their own text says', () => {
+    const series = buildPullListSeries(
+      [
+        issue({ book_id: 1, series: 'X-Factor', volume: '2020', publisher: 'Marvel', series_volume: sv }),
+        issue({ book_id: 2, series: 'X-Factor', volume: null, publisher: 'Marvel Comics', number: '10', series_volume: sv }),
+        issue({ book_id: 3, series: 'X-Factor', volume: null, publisher: 'Marvel Comics', number: '11' }),
+      ],
+      [meta({ series: 'X-Factor', volume: '2020', publisher: 'Marvel', status: 'read_all' })]
+    );
+
+    expect(series.map((s) => [s.series, s.volume, s.publisher, s.totalIssues])).toEqual([
+      ['X-Factor', '2020', 'Marvel', 2],
+      ['X-Factor', '', 'Marvel Comics', 1],
+    ]);
+    expect(series[0]).toMatchObject({ status: 'read_all', runIssueCount: 10, isOngoing: false, sourceUrl: sv.site_url });
+    expect(series[1]).toMatchObject({ runIssueCount: null, isOngoing: null });
+  });
+
+  it('counts failed scans per comic', () => {
+    expect(
+      failedScanCount([
+        { error_id: 1, book_id: 5 },
+        { error_id: 2, book_id: 5 },
+        { error_id: 3, book_id: 6 },
+        { error_id: 4, book_id: null },
+      ])
+    ).toBe(3);
   });
 });

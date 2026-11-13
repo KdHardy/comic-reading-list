@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PullListIssue, PullListSeriesMeta } from '../lib/types';
 
 vi.mock('../lib/api', () => ({
+  fetchOpenStuartErrors: vi.fn(),
   fetchPullListIssues: vi.fn(),
   fetchPullListSeriesMeta: vi.fn(),
   reorderPullListSeries: vi.fn(),
@@ -55,6 +56,7 @@ beforeEach(() => {
     issue({ book_id: 3, series: 'Saga', publisher: 'Image', volume: null }),
   ]);
   vi.mocked(api.fetchPullListSeriesMeta).mockResolvedValue(metadata);
+  vi.mocked(api.fetchOpenStuartErrors).mockResolvedValue([]);
   vi.mocked(api.setPullListSeriesStatus).mockResolvedValue();
   vi.mocked(api.setPullListSeriesFamily).mockResolvedValue();
   vi.mocked(api.reorderPullListSeries).mockResolvedValue();
@@ -128,6 +130,55 @@ describe('PullListPage', () => {
 
     expect(screen.queryByRole('button', { name: 'Edit title art for X-Men (2021)' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Drag Saga to reorder' })).toBeDisabled();
+  });
+
+  it('shows the run size and ongoing status from a Stuart match', async () => {
+    vi.mocked(api.fetchPullListIssues).mockResolvedValue([
+      issue({
+        book_id: 9,
+        series: 'Cable',
+        volume: null,
+        series_volume: {
+          series_volume_id: 1,
+          name: 'Cable',
+          start_year: 2020,
+          publisher: 'Marvel',
+          count_of_issues: 12,
+          is_ongoing: true,
+          site_url: null,
+        },
+      }),
+    ]);
+    render(<PullListPage />);
+
+    const cable = await waitFor(() => rowFor('Cable (2020)'));
+    expect(within(cable).getByText('of 12')).toBeInTheDocument();
+    expect(within(cable).getByText('Ongoing')).toBeInTheDocument();
+  });
+
+  it('links to scan failures and lists them', async () => {
+    vi.mocked(api.fetchOpenStuartErrors).mockResolvedValue([
+      {
+        error_id: 1,
+        book_id: 3,
+        series: 'Buffy Season 9',
+        volume: null,
+        publisher: 'Dark Horse Comics',
+        number: '1',
+        adapter: 'comicvine',
+        code: 'no_candidates',
+        message: 'Found 1 ComicVine volume(s), but none fit.',
+        details: { rejected: [] },
+        created_at: '2026-11-13T08:00:00Z',
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<PullListPage />);
+
+    await user.click(await screen.findByRole('button', { name: '1 recent scans failed. Click for error conditions.' }));
+    const dialog = screen.getByRole('dialog', { name: 'Metadata scan failures' });
+    expect(within(dialog).getByText('Buffy Season 9 #1')).toBeInTheDocument();
+    expect(within(dialog).getByText('no_candidates')).toBeInTheDocument();
   });
 
   it('holds storylines for future work', async () => {

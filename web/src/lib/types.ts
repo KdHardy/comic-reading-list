@@ -115,6 +115,17 @@ export interface PullListSeriesMeta extends SeriesKey {
   title_art_h: number | null;
 }
 
+/** Canonical series/volume Stuart matched a book to (from ComicVine). */
+export interface SeriesVolume {
+  series_volume_id: number;
+  name: string;
+  start_year: number | null;
+  publisher: string | null;
+  count_of_issues: number | null;
+  is_ongoing: boolean | null;
+  site_url: string | null;
+}
+
 /** A book that appears on at least one list, as needed by the Pull List. */
 export interface PullListIssue {
   book_id: number;
@@ -126,6 +137,23 @@ export interface PullListIssue {
   thumbnail: string | null;
   thumbnail_cached_at: string | null;
   completed: boolean;
+  /** Set once Stuart has matched the book; the Pull List then groups by it. */
+  series_volume?: SeriesVolume | null;
+}
+
+/** An open Stuart scan failure, shown from the Pull List. */
+export interface StuartScanError {
+  error_id: number;
+  book_id: number | null;
+  series: string | null;
+  volume: string | null;
+  publisher: string | null;
+  number: string | null;
+  adapter: string;
+  code: string;
+  message: string;
+  details: unknown;
+  created_at: string;
 }
 
 export interface PullListTitleArt {
@@ -145,4 +173,8 @@ export interface PullListSeries extends SeriesKey {
   totalIssues: number;
   issuesRead: number;
   titleArt: PullListTitleArt | null;
+  /** From Stuart's match, when there is one: issues in the whole run, and whether it's still coming out. */
+  runIssueCount: number | null;
+  isOngoing: boolean | null;
+  sourceUrl: string | null;
 }

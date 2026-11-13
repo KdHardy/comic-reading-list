@@ -21,6 +21,19 @@ export function seriesKeyOf(item: { series: string; volume: string | null; publi
   return { series: item.series, volume: item.volume ?? '', publisher: item.publisher ?? '' };
 }
 
+/**
+ * The series an issue is listed under: Stuart's canonical series/volume once it has
+ * matched the book, otherwise the book's own text. Must stay in step with the
+ * book_pull_list_key() SQL function.
+ */
+export function issueSeriesKey(issue: PullListIssue): SeriesKey {
+  const sv = issue.series_volume;
+  if (sv) {
+    return { series: sv.name, volume: sv.start_year != null ? String(sv.start_year) : '', publisher: sv.publisher ?? '' };
+  }
+  return seriesKeyOf(issue);
+}
+
 export function seriesKeyString(key: SeriesKey): string {
   return JSON.stringify([key.series, key.volume, key.publisher]);
 }
@@ -84,7 +97,7 @@ export function buildPullListSeries(
   const issuesByKey = new Map<string, Map<number, PullListIssue>>();
 
   for (const issue of issues) {
-    const key = seriesKeyString(seriesKeyOf(issue));
+    const key = seriesKeyString(issueSeriesKey(issue));
     let byBook = issuesByKey.get(key);
     if (!byBook) {
       byBook = new Map();
@@ -97,8 +110,9 @@ export function buildPullListSeries(
   for (const [key, byBook] of issuesByKey) {
     const seriesIssues = [...byBook.values()].sort(compareIssues);
     const meta = metaByKey.get(key);
+    const sv = seriesIssues.find((issue) => issue.series_volume)?.series_volume ?? null;
     series.push({
-      ...seriesKeyOf(seriesIssues[0]),
+      ...issueSeriesKey(seriesIssues[0]),
       key,
       family: meta?.family ?? null,
       status: meta?.status ?? null,
@@ -107,6 +121,9 @@ export function buildPullListSeries(
       totalIssues: seriesIssues.length,
       issuesRead: seriesIssues.filter((issue) => issue.completed).length,
       titleArt: resolveTitleArt(seriesIssues, meta),
+      runIssueCount: sv?.count_of_issues ?? null,
+      isOngoing: sv?.is_ongoing ?? null,
+      sourceUrl: sv?.site_url ?? null,
     });
   }
 
@@ -143,4 +160,9 @@ export function normalizeCrop(start: { x: number; y: number }, end: { x: number;
 /** Ignore accidental clicks: a usable crop must cover at least 3% of each dimension. */
 export function isUsableCrop(crop: TitleArtCrop): boolean {
   return crop.w >= 0.03 && crop.h >= 0.03;
+}
+
+/** Number of distinct comics with an open scan failure. */
+export function failedScanCount(errors: readonly { book_id: number | null; error_id: number }[]): number {
+  return new Set(errors.map((e) => (e.book_id != null ? `b${e.book_id}` : `e${e.error_id}`))).size;
 }

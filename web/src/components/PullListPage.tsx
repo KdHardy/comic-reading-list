@@ -16,6 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import {
+  fetchOpenStuartErrors,
   fetchPullListIssues,
   fetchPullListSeriesMeta,
   reorderPullListSeries,
@@ -27,12 +28,14 @@ import {
   DEFAULT_TITLE_ART_CROP,
   PULL_LIST_STATUSES,
   buildPullListSeries,
+  failedScanCount,
   familyOptions,
   filterPullListSeries,
   type PullListStatusFilter,
 } from '../lib/pullList';
-import type { PullListSeries, PullListStatus, TitleArtCrop } from '../lib/types';
+import type { PullListSeries, PullListStatus, StuartScanError, TitleArtCrop } from '../lib/types';
 import { FAMILY_DATALIST_ID, PullListSeriesRow } from './PullListSeriesRow';
+import { ScanErrorsDialog } from './ScanErrorsDialog';
 import { TitleArtEditor } from './TitleArtEditor';
 
 type PullListView = 'series' | 'storylines';
@@ -54,6 +57,8 @@ export function PullListPage() {
   const [series, setSeries] = useState<PullListSeries[]>([]);
   const [statusFilter, setStatusFilter] = useState<PullListStatusFilter>('all');
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [scanErrors, setScanErrors] = useState<StuartScanError[]>([]);
+  const [showScanErrors, setShowScanErrors] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +74,10 @@ export function PullListPage() {
     try {
       const [issues, metadata] = await Promise.all([fetchPullListIssues(), fetchPullListSeriesMeta()]);
       setSeries(buildPullListSeries(issues, metadata));
+      // Scan failures are an extra; the page works without them.
+      fetchOpenStuartErrors()
+        .then(setScanErrors)
+        .catch(() => setScanErrors([]));
       setError(null);
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : 'Failed to load the pull list.');
@@ -227,6 +236,11 @@ export function PullListPage() {
             </label>
             <span className="pull-list-summary">
               {visibleSeries.length} series · {totals.read} / {totals.issues} issues read
+              {scanErrors.length > 0 && (
+                <button type="button" className="pull-list-scan-errors" onClick={() => setShowScanErrors(true)}>
+                  {failedScanCount(scanErrors)} recent scans failed. Click for error conditions.
+                </button>
+              )}
             </span>
           </div>
 
@@ -274,6 +288,8 @@ export function PullListPage() {
           </div>
         </>
       )}
+
+      {showScanErrors && <ScanErrorsDialog errors={scanErrors} onClose={() => setShowScanErrors(false)} />}
 
       {editingSeries && (
         <TitleArtEditor
