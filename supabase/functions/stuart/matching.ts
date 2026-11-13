@@ -24,6 +24,11 @@ export interface GroupBook {
 }
 
 const TITLE_STOP_WORDS = new Set(['the', 'a', 'an']);
+const NUMBER_WORDS: Record<string, string> = {
+  one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', ten: '10',
+  eleven: '11', twelve: '12', thirteen: '13', fourteen: '14', fifteen: '15', sixteen: '16', seventeen: '17',
+  eighteen: '18', nineteen: '19', twenty: '20',
+};
 const PUBLISHER_STOP_WORDS = new Set([
   'comics', 'comic', 'publishing', 'publications', 'studios', 'studio',
   'entertainment', 'inc', 'llc', 'ltd', 'press', 'group', 'books', 'media',
@@ -42,9 +47,36 @@ function words(text: string): string[] {
     .filter(Boolean);
 }
 
-/** "The Immortal Hulk" and "Immortal Hulk" compare equal; punctuation and case are ignored. */
+function titleWords(title: string): string[] {
+  return words(title)
+    .filter((w, i) => !(i === 0 && TITLE_STOP_WORDS.has(w)))
+    .map((w) => NUMBER_WORDS[w] ?? w);
+}
+
+/**
+ * "The Immortal Hulk" = "Immortal Hulk" and "Angel Season Eleven" = "Angel Season 11":
+ * punctuation, case, a leading article and spelled-out numbers are ignored.
+ */
 export function normalizeTitle(title: string): string {
-  return words(title).filter((w, i) => !(i === 0 && TITLE_STOP_WORDS.has(w))).join(' ');
+  return titleWords(title).join(' ');
+}
+
+/**
+ * A looser title match for shorthand names: every word of `wanted` appears in
+ * `candidate`, in order, starting with the same first word. "Buffy Season 9"
+ * loosely matches "Buffy the Vampire Slayer Season Nine". Only used when no
+ * exact title fits, and always verified against an issue date.
+ */
+export function titleLooselyMatches(wanted: string, candidate: string): boolean {
+  const want = titleWords(wanted);
+  const have = titleWords(candidate);
+  if (want.length === 0 || have[0] !== want[0]) return false;
+  let i = 0;
+  for (const word of have) {
+    if (word === want[i]) i += 1;
+    if (i === want.length) return true;
+  }
+  return false;
 }
 
 /** "Marvel Comics" → "marvel", "BOOM! Studios" → "boom", "IDW Publishing" → "idw". */
@@ -96,6 +128,8 @@ export function earliestPublishDate(books: readonly GroupBook[]): string | null 
 
 export interface CandidateFilterResult {
   candidates: VolumeCandidate[];
+  /** True when no exact title fit and the candidates are loose title matches. */
+  loose: boolean;
   rejected: { sourceId: string; name: string; startYear: number | null; publisher: string | null; reason: string }[];
 }
 
@@ -117,15 +151,15 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
     rejected.push({ sourceId: c.sourceId, name: c.name, startYear: c.startYear, publisher: c.publisher, reason });
 
   const seen = new Set<string>();
-  const candidates: VolumeCandidate[] = [];
-  for (const c of all) {
-    if (seen.has(c.sourceId)) continue;
-    seen.add(c.sourceId);
+  const unique = all.filter((c) => !seen.has(c.sourceId) && seen.add(c.sourceId));
+  const exact = unique.filter((c) => normalizeTitle(c.name) === wantTitle);
+  const loose = exact.length === 0;
+  const titled = loose ? unique.filter((c) => titleLooselyMatches(group.series, c.name)) : exact;
+  const titledIds = new Set(titled.map((c) => c.sourceId));
+  for (const c of unique) if (!titledIds.has(c.sourceId)) reject(c, 'title differs');
 
-    if (normalizeTitle(c.name) !== wantTitle) {
-      reject(c, 'title differs');
-      continue;
-    }
+  const candidates: VolumeCandidate[] = [];
+  for (const c of titled) {
     if (group.publisher && !publishersMatch(group.publisher, c.publisher)) {
       reject(c, 'publisher differs');
       continue;
@@ -148,8 +182,9 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
 
   // Most recent start year first: with a publish date, the newest run that
   // started on or before it is the likeliest.
-  candidates.sort((a, b) => (b.startYear ?? 0) - (a.startYear ?? 0));
-  return { candidates, rejected };
+  // On a tie, the plainer title first ("Buffy … Season Nine" before "Buffy … Season Nine: Guarded").
+  candidates.sort((a, b) => (b.startYear ?? 0) - (a.startYear ?? 0) || a.name.length - b.name.length);
+  return { candidates, loose: loose && candidates.length > 0, rejected };
 }
 
 /** Days between two YYYY-MM-DD dates (absolute). */

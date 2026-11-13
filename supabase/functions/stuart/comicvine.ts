@@ -171,22 +171,27 @@ export class ComicVineAdapter implements SeriesAdapter {
     return text.replace(/[,:]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
+  /**
+   * ComicVine's search ranks exact titles first, so it's the main lookup. The
+   * name filter (a substring match, unsorted) is the fallback when search
+   * turns up nothing usable.
+   */
   private async findCandidates(group: BookGroup): Promise<{ volumes: CvVolume[]; all: VolumeCandidate[] }> {
-    const byName = await this.get<CvVolume[]>('volumes', 'volumes/', {
-      filter: `name:${this.filterValue(group.series)}`,
+    const search = await this.get<CvVolume[]>('search', 'search/', {
+      query: group.series,
+      resources: 'volume',
       field_list: VOLUME_FIELDS,
-      limit: '100',
+      limit: '10',
     });
-    let volumes = byName.status_code === 1 ? byName.results : [];
+    let volumes = search.status_code === 1 ? search.results : [];
 
-    if (volumes.length === 0) {
-      const search = await this.get<CvVolume[]>('search', 'search/', {
-        query: group.series,
-        resources: 'volume',
+    if (filterCandidates(group, volumes.map((v) => this.toCandidate(v))).candidates.length === 0) {
+      const byName = await this.get<CvVolume[]>('volumes', 'volumes/', {
+        filter: `name:${this.filterValue(group.series)}`,
         field_list: VOLUME_FIELDS,
-        limit: '10',
+        limit: '100',
       });
-      volumes = search.status_code === 1 ? search.results : [];
+      if (byName.status_code === 1) volumes = [...volumes, ...byName.results];
     }
     return { volumes, all: volumes.map((v) => this.toCandidate(v)) };
   }
@@ -262,7 +267,7 @@ export class ComicVineAdapter implements SeriesAdapter {
         return { kind: 'failed', code: 'not_found', message: `No ComicVine volume named "${group.series}".` };
       }
 
-      const { candidates, rejected } = filterCandidates(group, all);
+      const { candidates, loose, rejected } = filterCandidates(group, all);
       const summary = (c: VolumeCandidate) => ({
         id: c.sourceId,
         name: c.name,
@@ -283,12 +288,15 @@ export class ComicVineAdapter implements SeriesAdapter {
       const probe = pickProbeBook(group);
       let match: VolumeCandidate | null = null;
       if (!probe) {
-        if (candidates.length === 1) match = candidates[0];
+        // A loose title match is only trusted once an issue date confirms it.
+        if (candidates.length === 1 && !loose) match = candidates[0];
         else {
           return {
             kind: 'failed',
             code: 'ambiguous',
-            message: `${candidates.length} ComicVine volumes fit "${group.series}" and the comics have no publish date to tell them apart.`,
+            message: loose
+              ? `"${group.series}" only loosely matches ComicVine titles, and the comics have no publish date to confirm one.`
+              : `${candidates.length} ComicVine volumes fit "${group.series}" and the comics have no publish date to tell them apart.`,
             details: { candidates: candidates.slice(0, 10).map(summary) },
           };
         }

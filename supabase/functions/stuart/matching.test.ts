@@ -8,6 +8,7 @@ import {
   normalizePublisher,
   normalizeTitle,
   publishersMatch,
+  titleLooselyMatches,
   volumeYear,
   type BookGroup,
   type VolumeCandidate,
@@ -37,9 +38,17 @@ function group(overrides: Partial<BookGroup> = {}): BookGroup {
 describe('normalizers', () => {
   it('ignores case, punctuation and a leading article in titles', () => {
     expect(normalizeTitle('The Immortal Hulk')).toBe(normalizeTitle('Immortal Hulk'));
-    expect(normalizeTitle('Star Wars: Rogue One – Saw Gerrera')).toBe('star wars rogue one saw gerrera');
+    expect(normalizeTitle('Star Wars: Rogue One – Saw Gerrera')).toBe('star wars rogue 1 saw gerrera');
     expect(normalizeTitle('Willow & Tara')).toBe('willow and tara');
     expect(normalizeTitle('X-Men')).not.toBe(normalizeTitle('X-Factor'));
+    expect(normalizeTitle('Angel Season Eleven')).toBe(normalizeTitle('Angel Season 11'));
+  });
+
+  it('loosely matches shorthand titles in word order', () => {
+    expect(titleLooselyMatches('Buffy Season 9', 'Buffy the Vampire Slayer Season Nine')).toBe(true);
+    expect(titleLooselyMatches('Buffy Season 9', 'Buffy the Vampire Slayer Season 11')).toBe(false);
+    expect(titleLooselyMatches('Season 9', 'Buffy the Vampire Slayer Season Nine')).toBe(false);
+    expect(titleLooselyMatches('Die', 'Die!Die!Die!')).toBe(true);
   });
 
   it('reduces publishers to their distinctive name', () => {
@@ -122,6 +131,28 @@ describe('filterCandidates', () => {
   it('accepts any publisher when the comic has none', () => {
     const { candidates } = filterCandidates(group({ publisher: null }), [candidate({ sourceId: '1', publisher: 'Marvel' })]);
     expect(candidates).toHaveLength(1);
+  });
+
+  it('falls back to loose title matches only when no exact title fits', () => {
+    const buffy = group({
+      series: 'Buffy Season 9',
+      publisher: 'Dark Horse Comics',
+      books: [{ bookId: 1, number: '25', publishDate: '2013-09-11' }],
+    });
+    const loose = filterCandidates(buffy, [
+      candidate({ sourceId: '1', name: 'Buffy the Vampire Slayer Season Nine: Guarded', startYear: 2011, publisher: 'Dark Horse', countOfIssues: 1 }),
+      candidate({ sourceId: '2', name: 'Buffy the Vampire Slayer Season Nine', startYear: 2011, publisher: 'Dark Horse Comics', countOfIssues: 25 }),
+      candidate({ sourceId: '3', name: 'Charmed Season Nine', startYear: 2011, publisher: 'Zenescope' }),
+    ]);
+    expect(loose.loose).toBe(true);
+    expect(loose.candidates.map((c) => c.sourceId)).toEqual(['2']);
+
+    const exact = filterCandidates(group({ series: 'Die', publisher: 'Image' }), [
+      candidate({ sourceId: '1', name: 'Die', startYear: 2018, publisher: 'Image' }),
+      candidate({ sourceId: '2', name: 'Die!Die!Die!', startYear: 2018, publisher: 'Image' }),
+    ]);
+    expect(exact.loose).toBe(false);
+    expect(exact.candidates.map((c) => c.sourceId)).toEqual(['1']);
   });
 
   it('drops duplicate results', () => {

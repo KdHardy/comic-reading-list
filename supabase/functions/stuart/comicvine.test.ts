@@ -55,7 +55,7 @@ const group: BookGroup = {
 
 function catwomanRoutes(): Record<string, Route> {
   return {
-    'volumes/': () => catwomanVolumes,
+    'search/': () => catwomanVolumes,
     'issues/': (url) => {
       const filter = url.searchParams.get('filter')!;
       if (filter === 'volume:200,issue_number:31') return [{ id: 31, issue_number: '31', store_date: '2021-05-18', cover_date: '2021-07-01' }];
@@ -115,7 +115,7 @@ describe('ComicVineAdapter', () => {
     const result = await adapter(fetchFn).resolve(group, { knownSourceId: '200', knownStorylineIds: new Set(['9']) });
 
     expect(result.kind).toBe('matched');
-    expect(calls.some((c) => c.pathname.endsWith('/volumes/'))).toBe(false);
+    expect(calls.some((c) => c.pathname.endsWith('/search/'))).toBe(false);
     expect(calls.some((c) => c.pathname.includes('story_arc'))).toBe(false);
   });
 
@@ -131,23 +131,33 @@ describe('ComicVineAdapter', () => {
     }
   });
 
-  it('falls back to search and reports when nothing has the same title', async () => {
+  it('falls back to the name filter and reports when nothing has a matching title', async () => {
     const { fetchFn, calls } = fakeComicVine({
-      'volumes/': () => [],
-      'search/': () => [{ id: 5, name: 'Buffy the Vampire Slayer Season Nine', start_year: '2011', publisher: { name: 'Dark Horse' }, count_of_issues: 25, last_issue: null, site_detail_url: null }],
+      'search/': () => [{ id: 5, name: 'Charmed Season Nine', start_year: '2011', publisher: { name: 'Zenescope' }, count_of_issues: 25, last_issue: null, site_detail_url: null }],
+      'volumes/': () => [{ id: 6, name: 'Soldiers of Fortune', start_year: '1951', publisher: { name: 'ACG' }, count_of_issues: 13, last_issue: null, site_detail_url: null }],
     });
     const result = await adapter(fetchFn).resolve(
       { series: 'Buffy Season 9', volume: null, publisher: 'Dark Horse Comics', books: [{ bookId: 1, number: '1', publishDate: '2011-09-14' }] },
       { knownSourceId: null, knownStorylineIds: new Set() }
     );
 
-    expect(calls.map((c) => c.pathname)).toEqual(['/api/volumes/', '/api/search/']);
+    expect(calls.map((c) => c.pathname)).toEqual(['/api/search/', '/api/volumes/']);
     expect(result).toMatchObject({ kind: 'failed', code: 'no_candidates' });
+  });
+
+  it('only accepts a loose title match once an issue date confirms it', async () => {
+    const buffy = { id: 42820, name: 'Buffy the Vampire Slayer Season Nine', start_year: '2011', publisher: { name: 'Dark Horse Comics' }, count_of_issues: 25, last_issue: null, site_detail_url: null };
+    const { fetchFn } = fakeComicVine({ 'search/': () => [buffy], 'issues/': () => [] });
+    const undated = await adapter(fetchFn).resolve(
+      { series: 'Buffy Season 9', volume: null, publisher: 'Dark Horse Comics', books: [{ bookId: 1, number: '1', publishDate: null }] },
+      { knownSourceId: null, knownStorylineIds: new Set() }
+    );
+    expect(undated).toMatchObject({ kind: 'failed', code: 'ambiguous' });
   });
 
   it('stops the batch on a rejected API key', async () => {
     const { fetchFn } = fakeComicVine({
-      'volumes/': () => ({ status_code: 100, error: 'Invalid API Key', number_of_total_results: 0, results: [] }),
+      'search/': () => ({ status_code: 100, error: 'Invalid API Key', number_of_total_results: 0, results: [] }),
     });
     const error = await adapter(fetchFn)
       .resolve(group, { knownSourceId: null, knownStorylineIds: new Set() })
@@ -158,7 +168,7 @@ describe('ComicVineAdapter', () => {
 
   it('defers books once the request budget runs out', async () => {
     const { fetchFn } = fakeComicVine(catwomanRoutes());
-    // volumes + verify + issue list + issue 31 detail = 4 (arc detail skipped: low budget).
+    // search + verify + issue list + issue 31 detail = 4 (arc detail skipped: low budget).
     const result = await adapter(fetchFn, { maxRequests: 4 }).resolve(group, {
       knownSourceId: null,
       knownStorylineIds: new Set(),
