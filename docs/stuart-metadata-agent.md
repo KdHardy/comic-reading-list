@@ -32,7 +32,9 @@ pg_cron (every 30 min, 07:00–14:30 UTC)
   trigger. Stuart's own writes don't re-queue books.
 - At **midnight US Pacific** (`stuart_config.timezone`), `stuart_tick()` starts a
   batch if any books are pending. Nights with nothing pending make no calls.
-- Each batch is capped (~90 ComicVine requests, ~110 s). If books remain,
+- Each batch is capped (~90 ComicVine requests, ~110 s), and each ComicVine
+  resource is held under 180 requests per rolling hour across batches (from
+  `stuart_run.requests`); ComicVine itself allows about 200. If books remain,
   `stuart_tick()` starts another batch every 30 minutes until **6 am**, so a big
   backlog (like the first full scan of ~1,200 comics) finishes over a few nights.
 - A batch that hits a fatal error (e.g. a rejected API key) stops the rest of
@@ -46,9 +48,21 @@ as the reading-list date and within **92 days** (about a quarter). The release
 date is ComicVine's store date; when only a cover date exists, it's tried both
 as-is and moved back two months (publishers differ), and the closer one counts.
 
+**Stuart's own store comes first.** Every volume it has looked up is kept in
+`series_volume` (with its first/last issue numbers), and its issues in
+`series_volume_issue` (number, store and cover date, and story arcs once
+fetched). Volume details and issue dates almost never change, so a comic that
+fits a stored volume is matched without calling ComicVine. ComicVine is only
+asked when no stored volume fits, when an ongoing run needs an issue number it
+doesn't have yet (one refresh of its issue list), for a matched issue's story
+arcs the first time, and to refresh an ongoing run's details every 30 days
+(finished runs never). Batches record matches made from the store as
+`cache_hits` in `stuart_run.requests`.
+
 For each group of pending books with the same series/volume/publisher text:
 
-1. Reuse the ComicVine volume already matched for that group, if any.
+1. Reuse the ComicVine volume already matched for that group, if any; otherwise
+   try the stored volumes with the same title rules, ranking and date check.
 2. Otherwise search ComicVine for volumes (`/search`, which ranks exact titles
    first; the substring `/volumes?filter=name:…` is a fallback). Keep volumes
    whose **title** matches, ignoring case, punctuation, a leading "The" and
@@ -62,15 +76,31 @@ For each group of pending books with the same series/volume/publisher text:
    numbering (Action Comics #1031 in a 148-issue run) breaks that.
 3. **Pick the volume by date:** for the earliest dated comic, look up its issue
    number in up to 5 candidate volumes and take the one whose release date is a
-   solid match and closest.
+   solid match and closest. Candidates are checked in this order: runs whose
+   **issue range** (ComicVine's first–last issue, plus a year of slack) covers the
+   number; then runs that started closest to the **estimated start**, counting
+   one month per issue back from the run's own first issue (#16 in Sept 2021 →
+   around June 2020; Action Comics 2016 starts at #957, so #1041 in 2022 → 2015).
+   It's only an ordering: twice-monthly runs drift, and the date check decides.
 4. **Check every comic:** each dated comic must be a solid date match with its
    own issue in that volume; one that isn't is recorded as a `date_mismatch`
    failure rather than attached.
-5. A series whose comics have **no publish dates** can't be confirmed and is
+5. If search didn't turn up the run, **look the issue up directly**: every issue
+   with that number released within a month (then a quarter) of the comic's
+   date, in the same year, keeping those whose volume title matches. Uses the
+   group's highest-numbered dated comic, which has the fewest namesakes.
+6. A series whose comics have **no publish dates** can't be confirmed and is
    recorded as `no_date` for review. Nothing uncertain is guessed.
-6. For a matched volume, fetch its issues to map issue numbers, its latest issue
+7. For a matched volume, fetch its issues to map issue numbers, its latest issue
    date (**ongoing** = an issue within the last 90 days or upcoming), and each
    issue's story arcs.
+
+**Aliases.** `stuart_series_alias` maps a reading-list name to the title (and
+optionally start year and publisher) to search for, e.g. the wiki's "Buffy
+Classic" → "Buffy the Vampire Slayer" (1998, Dark Horse Comics).
+
+**Skipped.** Backup stories and extras ("… short", "… extra") aren't issues of
+a series; they're marked `scan_state = 'skipped'` with no error.
 
 The user's own `book.series / volume / publisher` text is never changed (blank
 publisher and publish date are filled when that can't collide with another book).
@@ -86,6 +116,8 @@ publisher and publish date are filled when that can't collide with another book)
 | `stuart_run` | One row per batch: status, counts, requests by resource, note |
 | `stuart_scan_error` | Failures per comic, with adapter, code, message and details; `cleared_at` is set once the comic later matches |
 | `stuart_config` | Enabled flag, function URL, time zone and nightly window |
+| `stuart_series_alias` | Reading-list series names → the title/year/publisher to look up |
+| `series_volume_issue` | Stored issues per volume: number, store/cover date, story arcs (service role only) |
 
 On the Pull List, matched comics are grouped under `book_pull_list_key()`:
 the ComicVine name, start year and publisher. Status, family, order and title

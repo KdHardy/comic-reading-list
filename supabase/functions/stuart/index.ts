@@ -16,6 +16,9 @@ import { SupabaseStuartStore } from './store.ts';
 
 // Edge Functions are stopped after ~150 s; leave room to record the result.
 const BATCH_TIME_MS = 110_000;
+// ComicVine allows ~200 requests per resource per hour; stay under it across batches.
+const HOURLY_LIMIT_PER_RESOURCE = 180;
+const COMICVINE_RESOURCES = ['search', 'volumes', 'volume', 'issues', 'issue', 'story_arc'];
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), { status, headers: { 'Content-Type': 'application/json' } });
@@ -59,8 +62,13 @@ Deno.serve(async (request) => {
     return json({ error: 'COMICVINE_API_KEY is not set' }, 500);
   }
 
+  const usedLastHour = (await store.recentRequestCounts(60)).comicvine ?? {};
+  const remainingByResource = Object.fromEntries(
+    COMICVINE_RESOURCES.map((r) => [r, Math.max(0, HOURLY_LIMIT_PER_RESOURCE - (usedLastHour[r] ?? 0))])
+  );
+
   const adapters = [
-    new ComicVineAdapter({ apiKey, deadline: startedAt + BATCH_TIME_MS }),
+    new ComicVineAdapter({ apiKey, deadline: startedAt + BATCH_TIME_MS, remainingByResource }),
   ];
 
   try {

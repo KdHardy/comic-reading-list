@@ -8,6 +8,9 @@ export interface VolumeCandidate {
   publisher: string | null;
   countOfIssues: number | null;
   siteUrl: string | null;
+  /** First and last issue numbers in the volume (legacy runs start high: Action Comics 2016 is #957–). */
+  firstIssueNumber?: string | null;
+  lastIssueNumber?: string | null;
 }
 
 export interface BookGroup {
@@ -15,6 +18,16 @@ export interface BookGroup {
   volume: string | null;
   publisher: string | null;
   books: GroupBook[];
+  /** A known alternative name for the series (see stuart_series_alias). */
+  alias?: SeriesAlias | null;
+}
+
+/** "Buffy Classic" is what the reading lists call "Buffy the Vampire Slayer" (1998, Dark Horse). */
+export interface SeriesAlias {
+  alias: string;
+  title: string;
+  startYear: number | null;
+  publisher: string | null;
 }
 
 export interface GroupBook {
@@ -127,6 +140,8 @@ export interface CandidateFilterResult {
   candidates: VolumeCandidate[];
   /** True when no exact title fit and the candidates are loose title matches. */
   loose: boolean;
+  /** When the run probably started, from the probe comic's number and date (YYYY-MM-DD). */
+  estimatedStart: string | null;
   rejected: { sourceId: string; name: string; startYear: number | null; publisher: string | null; reason: string }[];
 }
 
@@ -135,8 +150,10 @@ export interface CandidateFilterResult {
  * most likely first. Verification against issue dates happens afterwards.
  */
 export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate[]): CandidateFilterResult {
-  const wantTitle = normalizeTitle(group.series);
-  const wantYear = volumeYear(group.volume);
+  const title = searchTitle(group);
+  const wantTitle = normalizeTitle(title);
+  const wantYear = group.alias?.startYear ?? volumeYear(group.volume);
+  const wantPublisher = group.alias?.publisher ?? group.publisher;
   const firstYear = yearOf(earliestPublishDate(group.books));
 
   const rejected: CandidateFilterResult['rejected'] = [];
@@ -147,13 +164,13 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
   const unique = all.filter((c) => !seen.has(c.sourceId) && seen.add(c.sourceId));
   const exact = unique.filter((c) => normalizeTitle(c.name) === wantTitle);
   const loose = exact.length === 0;
-  const titled = loose ? unique.filter((c) => titleLooselyMatches(group.series, c.name)) : exact;
+  const titled = loose ? unique.filter((c) => titleLooselyMatches(title, c.name)) : exact;
   const titledIds = new Set(titled.map((c) => c.sourceId));
   for (const c of unique) if (!titledIds.has(c.sourceId)) reject(c, 'title differs');
 
   const candidates: VolumeCandidate[] = [];
   for (const c of titled) {
-    if (group.publisher && !publishersMatch(group.publisher, c.publisher)) {
+    if (wantPublisher && !publishersMatch(wantPublisher, c.publisher)) {
       reject(c, 'publisher differs');
       continue;
     }
@@ -161,7 +178,7 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
       reject(c, `started ${c.startYear}, not ${wantYear}`);
       continue;
     }
-    if (firstYear != null && c.startYear != null && c.startYear > firstYear) {
+    if (!group.alias?.startYear && firstYear != null && c.startYear != null && c.startYear > firstYear) {
       reject(c, `started ${c.startYear}, after the issue was published (${firstYear})`);
       continue;
     }
@@ -170,13 +187,72 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
     candidates.push(c);
   }
 
-  // Most recent start year first: with a publish date, the newest run that
-  // started on or before it is the likeliest.
-  // On a tie, the plainer title first ("Buffy … Season Nine" before "Buffy … Season Nine: Guarded").
-  candidates.sort((a, b) => (b.startYear ?? 0) - (a.startYear ?? 0) || a.name.length - b.name.length);
+  // Most likely runs first, using the probe comic's number and date:
+  //  1. runs whose issue range covers the number (ComicVine can lag on new
+  //     issues, so allow a year past the listed last issue);
+  //  2. runs that started closest to when this one probably did: issue #n is
+  //     about (n - first) months after the run's first issue, so legacy runs
+  //     that start high (Action Comics 2016 begins at #957) still estimate right.
+  // Only an ordering: twice-monthly runs drift, and the issue-date check decides.
+  // Then the newer run, then the plainer title ("Buffy … Season Nine" before
+  // "Buffy … Season Nine: Guarded").
+  const probe = pickProbeBook(group);
+  const estimatedStart = probe ? estimatedRunStart(probe) : null;
+  const wantNumber = probe ? issueNumberValue(probe.number) : null;
+  const rangeMiss = (c: VolumeCandidate) => {
+    const first = issueNumberValue(c.firstIssueNumber);
+    const last = issueNumberValue(c.lastIssueNumber);
+    if (wantNumber == null || first == null || last == null) return 0.5;
+    return wantNumber >= first && wantNumber <= last + 12 ? 0 : 1;
+  };
+  const distance = (c: VolumeCandidate) => {
+    const estYear = probe ? yearOf(estimatedRunStart(probe, issueNumberValue(c.firstIssueNumber) ?? 1)) : null;
+    return estYear != null && c.startYear != null ? Math.abs(c.startYear - estYear) : Number.POSITIVE_INFINITY;
+  };
+  candidates.sort(
+    (a, b) =>
+      rangeMiss(a) - rangeMiss(b) ||
+      distance(a) - distance(b) ||
+      (b.startYear ?? 0) - (a.startYear ?? 0) ||
+      a.name.length - b.name.length
+  );
   // Report the informative rejections (publisher, year) before "title differs".
   rejected.sort((a, b) => Number(a.reason === 'title differs') - Number(b.reason === 'title differs'));
-  return { candidates, loose: loose && candidates.length > 0, rejected };
+  return { candidates, loose: loose && candidates.length > 0, estimatedStart, rejected };
+}
+
+/** The title to look a group up by: its alias when it has one. */
+export function searchTitle(group: BookGroup): string {
+  return group.alias?.title ?? group.series;
+}
+
+/** The alias for a series name, if any (case, punctuation and spelled-out numbers ignored). */
+export function findAlias(series: string, aliases: readonly SeriesAlias[]): SeriesAlias | null {
+  const want = normalizeTitle(series);
+  return aliases.find((a) => normalizeTitle(a.alias) === want) ?? null;
+}
+
+/**
+ * Backup stories and extras inside other comics ("Buffy Season 9 short",
+ * "Angel extra") aren't issues of a series, so Stuart skips them.
+ */
+export function skippedFormat(series: string): 'short' | 'extra' | null {
+  const match = series.trim().match(/\s(short|extra)$/i);
+  return match ? (match[1].toLowerCase() as 'short' | 'extra') : null;
+}
+
+/**
+ * A release-date window to look an issue up in: `days` either side of the
+ * reading-list date (default about a quarter), kept inside the same year.
+ */
+export function issueSearchWindow(date: string, days = DATE_WINDOW_DAYS): { start: string; end: string } {
+  const year = date.slice(0, 4);
+  const start = shiftDays(date, -days);
+  const end = shiftDays(date, days);
+  return {
+    start: start.slice(0, 4) === year ? start : `${year}-01-01`,
+    end: end.slice(0, 4) === year ? end : `${year}-12-31`,
+  };
 }
 
 /** Days between two YYYY-MM-DD dates (absolute). */
@@ -231,6 +307,27 @@ export function compareDates(bookDate: string | null, storeDate: string | null, 
   return { solid: best.solid, days: best.days, basis: best.basis, releaseDate: best.date };
 }
 
+/** Numeric value of an issue number ("013" → 13, "1.MU" → 1); null when it isn't numeric. */
+export function issueNumberValue(number: string | null | undefined): number | null {
+  const n = Number.parseFloat(normalizeIssueNumber(number) ?? '');
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * When a monthly run that reached this issue probably began: issue #n comes
+ * out about (n - first) months after the run's first issue, #1 by default
+ * (#13 dated 2022-03-09 → about 2021-03). Null without a date; the comic's own
+ * date for non-numeric or out-of-range numbers.
+ */
+export function estimatedRunStart(book: GroupBook, firstIssue = 1): string | null {
+  if (!book.publishDate) return null;
+  const n = issueNumberValue(book.number);
+  if (n == null || n < firstIssue) return book.publishDate;
+  const date = new Date(`${book.publishDate}T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - Math.floor(n - firstIssue));
+  return date.toISOString().slice(0, 10);
+}
+
 /** The book in a group used to verify candidate volumes: the earliest dated, numbered one. */
 export function pickProbeBook(group: BookGroup): GroupBook | null {
   return (
@@ -238,6 +335,16 @@ export function pickProbeBook(group: BookGroup): GroupBook | null {
       .filter((b) => b.publishDate && normalizeIssueNumber(b.number))
       .sort((a, b) => a.publishDate!.localeCompare(b.publishDate!))[0] ?? null
   );
+}
+
+/**
+ * The book to look an issue up by: the dated one with the highest issue
+ * number, since high numbers have far fewer namesakes in a given month.
+ */
+export function pickLookupBook(group: BookGroup): GroupBook | null {
+  const dated = group.books.filter((b) => b.publishDate && normalizeIssueNumber(b.number));
+  const numeric = (b: GroupBook) => Number.parseFloat(normalizeIssueNumber(b.number)!);
+  return dated.sort((a, b) => (numeric(b) || 0) - (numeric(a) || 0))[0] ?? null;
 }
 
 /** A series/volume counts as ongoing when its latest issue is under 90 days old (or not out yet). */

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   compareDates,
+  estimatedRunStart,
   filterCandidates,
+  findAlias,
   groupBooks,
+  issueSearchWindow,
+  pickLookupBook,
+  skippedFormat,
   isOngoing,
   normalizeIssueNumber,
   normalizePublisher,
@@ -119,7 +124,44 @@ describe('filterCandidates', () => {
         candidate({ sourceId: '91078', name: 'Action Comics', startYear: 2016, countOfIssues: 148 }),
       ]
     );
-    expect(candidates.map((c) => c.sourceId)).toEqual(['91078', '18005']);
+    expect(candidates.map((c) => c.sourceId).sort()).toEqual(['18005', '91078']);
+  });
+
+  it("puts legacy-numbered runs whose issue range covers the number first", () => {
+    const { candidates } = filterCandidates(
+      group({ series: 'Action Comics', books: [{ bookId: 1, number: '1041', publishDate: '2022-03-22' }] }),
+      [
+        candidate({ sourceId: '18005', name: 'Action Comics', startYear: 1938, firstIssueNumber: '1', lastIssueNumber: '904' }),
+        candidate({ sourceId: '42563', name: 'Action Comics', startYear: 2011, firstIssueNumber: '1', lastIssueNumber: '52' }),
+        candidate({ sourceId: '91078', name: 'Action Comics', startYear: 2016, firstIssueNumber: '957', lastIssueNumber: '1104' }),
+      ]
+    );
+    expect(candidates.map((c) => c.sourceId)).toEqual(['91078', '18005', '42563']);
+  });
+
+  it('allows a year of new issues past the listed last issue', () => {
+    const { candidates } = filterCandidates(
+      group({ series: 'Wolverine', publisher: 'Marvel', books: [{ bookId: 1, number: '55', publishDate: '2024-12-04' }] }),
+      [
+        candidate({ sourceId: 'old', name: 'Wolverine', publisher: 'Marvel', startYear: 2013, firstIssueNumber: '1', lastIssueNumber: '13' }),
+        candidate({ sourceId: 'lagging', name: 'Wolverine', publisher: 'Marvel', startYear: 2020, firstIssueNumber: '1', lastIssueNumber: '50' }),
+      ]
+    );
+    expect(candidates[0].sourceId).toBe('lagging');
+  });
+
+  it('checks runs that started closest to the estimated start first', () => {
+    const { candidates, estimatedStart } = filterCandidates(
+      group({ series: 'Daredevil', publisher: 'Marvel', books: [{ bookId: 1, number: '31', publishDate: '2002-05-01' }] }),
+      [
+        candidate({ sourceId: '2011', name: 'Daredevil', publisher: 'Marvel', startYear: 2011 }),
+        candidate({ sourceId: '1998', name: 'Daredevil', publisher: 'Marvel', startYear: 1998 }),
+        candidate({ sourceId: '1964', name: 'Daredevil', publisher: 'Marvel', startYear: 1964 }),
+      ]
+    );
+    // 2011 is ruled out (started after 2002); #31 in May 2002 points to a late-1999 start.
+    expect(estimatedStart).toBe('1999-11-01');
+    expect(candidates.map((c) => c.sourceId)).toEqual(['1998', '1964']);
   });
 
   it('lists informative rejections before title mismatches', () => {
@@ -175,6 +217,21 @@ describe('filterCandidates', () => {
   });
 });
 
+describe('estimatedRunStart', () => {
+  it('counts back one month per issue after #1', () => {
+    expect(estimatedRunStart({ bookId: 1, number: '13', publishDate: '2022-03-09' })).toBe('2021-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '1', publishDate: '2022-03-09' })).toBe('2022-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '0', publishDate: '2022-03-09' })).toBe('2022-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '1.MU', publishDate: '2022-03-09' })).toBe('2022-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '25', publishDate: null })).toBeNull();
+  });
+
+  it('counts back from a legacy first issue', () => {
+    // Action Comics (2016) starts at #957: #1041 is 84 issues (7 years) later.
+    expect(estimatedRunStart({ bookId: 1, number: '1041', publishDate: '2022-03-22' }, 957)).toBe('2015-03-22');
+  });
+});
+
 describe('dates', () => {
   it('needs the same year and about a quarter for a solid date match', () => {
     expect(compareDates('2021-05-18', '2021-05-18', '2021-07-01')).toMatchObject({ solid: true, days: 0, basis: 'store' });
@@ -215,5 +272,60 @@ describe('groupBooks', () => {
       { book_id: 3, series: 'X-Factor', volume: null, publisher: 'Marvel Comics', number: '9', publish_date: null },
     ]);
     expect(groups.map((g) => g.books.map((b) => b.bookId))).toEqual([[1], [2, 3]]);
+  });
+});
+
+describe('aliases', () => {
+  const buffyClassic = { alias: 'Buffy Classic', title: 'Buffy the Vampire Slayer', startYear: 1998, publisher: 'Dark Horse Comics' };
+
+  it('finds an alias by name, ignoring case and punctuation', () => {
+    expect(findAlias('buffy classic', [buffyClassic])).toBe(buffyClassic);
+    expect(findAlias('Buffy Classic one-shot', [buffyClassic])).toBeNull();
+  });
+
+  it('filters candidates by the alias title, year and publisher', () => {
+    const { candidates } = filterCandidates(
+      group({
+        series: 'Buffy Classic',
+        publisher: 'Dark Horse Comics',
+        books: [{ bookId: 1, number: '1', publishDate: '1998-09-23' }],
+        alias: buffyClassic,
+      }),
+      [
+        candidate({ sourceId: '1', name: 'Buffy the Vampire Slayer Classic', startYear: 2011, publisher: 'Dark Horse Comics' }),
+        candidate({ sourceId: '2', name: 'Buffy the Vampire Slayer', startYear: 1998, publisher: 'Dark Horse Comics' }),
+        candidate({ sourceId: '3', name: 'Buffy the Vampire Slayer', startYear: 2007, publisher: 'Dark Horse Comics' }),
+      ]
+    );
+    expect(candidates.map((c) => c.sourceId)).toEqual(['2']);
+  });
+});
+
+describe('skippedFormat', () => {
+  it('recognizes backup stories and extras by their label', () => {
+    expect(skippedFormat('Buffy Season 9 short')).toBe('short');
+    expect(skippedFormat('Angel extra')).toBe('extra');
+    expect(skippedFormat('Angel one-shot')).toBeNull();
+    expect(skippedFormat('Short Stack')).toBeNull();
+  });
+});
+
+describe('issueSearchWindow', () => {
+  it('spans about a quarter either side, inside the same year', () => {
+    expect(issueSearchWindow('2021-06-01')).toEqual({ start: '2021-03-01', end: '2021-09-01' });
+    expect(issueSearchWindow('2021-01-20')).toEqual({ start: '2021-01-01', end: '2021-04-22' });
+    expect(issueSearchWindow('2021-12-20')).toEqual({ start: '2021-09-19', end: '2021-12-31' });
+    expect(issueSearchWindow('2021-06-01', 31)).toEqual({ start: '2021-05-01', end: '2021-07-02' });
+  });
+
+  it('looks issues up by the highest-numbered dated comic', () => {
+    const g = group({
+      books: [
+        { bookId: 1, number: '7', publishDate: '2021-05-26' },
+        { bookId: 2, number: '11', publishDate: '2021-09-15' },
+        { bookId: 3, number: '12', publishDate: null },
+      ],
+    });
+    expect(pickLookupBook(g)?.bookId).toBe(2);
   });
 });
