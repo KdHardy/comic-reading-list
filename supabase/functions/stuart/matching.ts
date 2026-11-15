@@ -137,6 +137,8 @@ export interface CandidateFilterResult {
   candidates: VolumeCandidate[];
   /** True when no exact title fit and the candidates are loose title matches. */
   loose: boolean;
+  /** When the run probably started, from the probe comic's number and date (YYYY-MM-DD). */
+  estimatedStart: string | null;
   rejected: { sourceId: string; name: string; startYear: number | null; publisher: string | null; reason: string }[];
 }
 
@@ -182,13 +184,23 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
     candidates.push(c);
   }
 
-  // Most recent start year first: with a publish date, the newest run that
-  // started on or before it is the likeliest.
-  // On a tie, the plainer title first ("Buffy … Season Nine" before "Buffy … Season Nine: Guarded").
-  candidates.sort((a, b) => (b.startYear ?? 0) - (a.startYear ?? 0) || a.name.length - b.name.length);
+  // Runs that started closest to the estimated start first (issue #n is about
+  // n-1 months after #1). Only a ranking: legacy numbering and twice-monthly
+  // books don't follow it, and the issue-date check decides. Without an
+  // estimate, or on a tie, the newer run, then the plainer title ("Buffy …
+  // Season Nine" before "Buffy … Season Nine: Guarded").
+  const probe = pickProbeBook(group);
+  const estimatedStart = probe ? estimatedRunStart(probe) : null;
+  const estYear = yearOf(estimatedStart);
+  const distance = (c: VolumeCandidate) =>
+    estYear != null && c.startYear != null ? Math.abs(c.startYear - estYear) : Number.POSITIVE_INFINITY;
+  candidates.sort(
+    (a, b) =>
+      distance(a) - distance(b) || (b.startYear ?? 0) - (a.startYear ?? 0) || a.name.length - b.name.length
+  );
   // Report the informative rejections (publisher, year) before "title differs".
   rejected.sort((a, b) => Number(a.reason === 'title differs') - Number(b.reason === 'title differs'));
-  return { candidates, loose: loose && candidates.length > 0, rejected };
+  return { candidates, loose: loose && candidates.length > 0, estimatedStart, rejected };
 }
 
 /** The title to look a group up by: its alias when it has one. */
@@ -275,6 +287,20 @@ export function compareDates(bookDate: string | null, storeDate: string | null, 
   scored.sort((a, b) => Number(b.solid) - Number(a.solid) || a.days - b.days);
   const best = scored[0];
   return { solid: best.solid, days: best.days, basis: best.basis, releaseDate: best.date };
+}
+
+/**
+ * When a monthly run that reached this issue probably began: issue #n comes
+ * out about n-1 months after #1 (#13 dated 2022-03-09 → about 2021-03).
+ * Null for non-numeric issue numbers.
+ */
+export function estimatedRunStart(book: GroupBook): string | null {
+  if (!book.publishDate) return null;
+  const n = Number.parseFloat(normalizeIssueNumber(book.number) ?? '');
+  if (!Number.isFinite(n) || n < 1) return book.publishDate;
+  const date = new Date(`${book.publishDate}T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - (Math.floor(n) - 1));
+  return date.toISOString().slice(0, 10);
 }
 
 /** The book in a group used to verify candidate volumes: the earliest dated, numbered one. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   compareDates,
+  estimatedRunStart,
   filterCandidates,
   findAlias,
   groupBooks,
@@ -123,7 +124,22 @@ describe('filterCandidates', () => {
         candidate({ sourceId: '91078', name: 'Action Comics', startYear: 2016, countOfIssues: 148 }),
       ]
     );
-    expect(candidates.map((c) => c.sourceId)).toEqual(['91078', '18005']);
+    // #1031 points to a 1935 start, so 1938 is checked first; the issue-date check then finds 2016.
+    expect(candidates.map((c) => c.sourceId)).toEqual(['18005', '91078']);
+  });
+
+  it('checks runs that started closest to the estimated start first', () => {
+    const { candidates, estimatedStart } = filterCandidates(
+      group({ series: 'Daredevil', publisher: 'Marvel', books: [{ bookId: 1, number: '31', publishDate: '2002-05-01' }] }),
+      [
+        candidate({ sourceId: '2011', name: 'Daredevil', publisher: 'Marvel', startYear: 2011 }),
+        candidate({ sourceId: '1998', name: 'Daredevil', publisher: 'Marvel', startYear: 1998 }),
+        candidate({ sourceId: '1964', name: 'Daredevil', publisher: 'Marvel', startYear: 1964 }),
+      ]
+    );
+    // 2011 is ruled out (started after 2002); #31 in May 2002 points to a late-1999 start.
+    expect(estimatedStart).toBe('1999-11-01');
+    expect(candidates.map((c) => c.sourceId)).toEqual(['1998', '1964']);
   });
 
   it('lists informative rejections before title mismatches', () => {
@@ -176,6 +192,16 @@ describe('filterCandidates', () => {
   it('drops duplicate results', () => {
     const { candidates } = filterCandidates(group(), [candidate({ sourceId: '1' }), candidate({ sourceId: '1' })]);
     expect(candidates).toHaveLength(1);
+  });
+});
+
+describe('estimatedRunStart', () => {
+  it('counts back one month per issue after #1', () => {
+    expect(estimatedRunStart({ bookId: 1, number: '13', publishDate: '2022-03-09' })).toBe('2021-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '1', publishDate: '2022-03-09' })).toBe('2022-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '0', publishDate: '2022-03-09' })).toBe('2022-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '1.MU', publishDate: '2022-03-09' })).toBe('2022-03-09');
+    expect(estimatedRunStart({ bookId: 1, number: '25', publishDate: null })).toBeNull();
   });
 });
 

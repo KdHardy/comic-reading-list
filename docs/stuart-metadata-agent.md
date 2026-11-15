@@ -64,7 +64,10 @@ For each group of pending books with the same series/volume/publisher text:
    numbering (Action Comics #1031 in a 148-issue run) breaks that.
 3. **Pick the volume by date:** for the earliest dated comic, look up its issue
    number in up to 5 candidate volumes and take the one whose release date is a
-   solid match and closest.
+   solid match and closest. Candidates are checked in order of how close their
+   start year is to the run's **estimated start**: a monthly run reaches #n about
+   n−1 months after #1 (#16 in Sept 2021 → started around June 2020). It's only
+   an ordering, since legacy numbering and twice-monthly books don't follow it.
 4. **Check every comic:** each dated comic must be a solid date match with its
    own issue in that volume; one that isn't is recorded as a `date_mismatch`
    failure rather than attached.

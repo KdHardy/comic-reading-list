@@ -354,7 +354,7 @@ export class ComicVineAdapter implements SeriesAdapter {
     if (!chosen) {
       const title = searchTitle(group);
       const { volumes, all } = await this.findCandidates(group);
-      const { candidates, loose, rejected } = filterCandidates(group, all);
+      const { candidates, loose, estimatedStart, rejected } = filterCandidates(group, all);
       const summary = (c: VolumeCandidate) => ({
         id: c.sourceId,
         name: c.name,
@@ -417,6 +417,7 @@ export class ComicVineAdapter implements SeriesAdapter {
             checked_issue: probe.number,
             publish_date: probe.publishDate,
             earliest_publish_date: earliestPublishDate(group.books),
+            estimated_run_start: estimatedStart,
             loose_title_match: loose,
             checked: checked.map((c) => ({ ...summary(c.candidate), issue_id: c.issue, release_date: c.release_date, days_apart: c.days })),
             other_candidates: candidates.slice(MAX_VERIFY_CANDIDATES, 10).map(summary),
