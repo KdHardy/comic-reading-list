@@ -37,7 +37,7 @@ import {
 
 const BASE_URL = 'https://comicvine.gamespot.com/api';
 const USER_AGENT = 'ComicReadingList-Stuart/1.0 (personal reading-list metadata agent)';
-const VOLUME_FIELDS = 'id,name,start_year,publisher,count_of_issues,last_issue,site_detail_url';
+const VOLUME_FIELDS = 'id,name,start_year,publisher,count_of_issues,first_issue,last_issue,site_detail_url';
 const ISSUE_LIST_FIELDS = 'id,issue_number,store_date,cover_date';
 const MAX_VERIFY_CANDIDATES = 5;
 /** Issue-lookup results beyond this are too broad (e.g. every #1 in a quarter) to page through. */
@@ -78,6 +78,7 @@ interface CvVolume {
   start_year: string | null;
   publisher: { name: string } | null;
   count_of_issues: number | null;
+  first_issue?: { issue_number: string | null } | null;
   last_issue: { issue_number: string | null } | null;
   site_detail_url: string | null;
 }
@@ -188,6 +189,8 @@ export class ComicVineAdapter implements SeriesAdapter {
       publisher: v.publisher?.name ?? null,
       countOfIssues: v.count_of_issues ?? null,
       siteUrl: v.site_detail_url ?? null,
+      firstIssueNumber: v.first_issue?.issue_number ?? null,
+      lastIssueNumber: v.last_issue?.issue_number ?? null,
     };
   }
 
@@ -361,6 +364,7 @@ export class ComicVineAdapter implements SeriesAdapter {
         start_year: c.startYear,
         publisher: c.publisher,
         issues: c.countOfIssues,
+        issue_range: c.firstIssueNumber || c.lastIssueNumber ? `${c.firstIssueNumber ?? '?'}–${c.lastIssueNumber ?? '?'}` : null,
         url: c.siteUrl,
       });
 

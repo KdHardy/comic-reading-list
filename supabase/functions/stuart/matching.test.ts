@@ -124,8 +124,30 @@ describe('filterCandidates', () => {
         candidate({ sourceId: '91078', name: 'Action Comics', startYear: 2016, countOfIssues: 148 }),
       ]
     );
-    // #1031 points to a 1935 start, so 1938 is checked first; the issue-date check then finds 2016.
-    expect(candidates.map((c) => c.sourceId)).toEqual(['18005', '91078']);
+    expect(candidates.map((c) => c.sourceId).sort()).toEqual(['18005', '91078']);
+  });
+
+  it("puts legacy-numbered runs whose issue range covers the number first", () => {
+    const { candidates } = filterCandidates(
+      group({ series: 'Action Comics', books: [{ bookId: 1, number: '1041', publishDate: '2022-03-22' }] }),
+      [
+        candidate({ sourceId: '18005', name: 'Action Comics', startYear: 1938, firstIssueNumber: '1', lastIssueNumber: '904' }),
+        candidate({ sourceId: '42563', name: 'Action Comics', startYear: 2011, firstIssueNumber: '1', lastIssueNumber: '52' }),
+        candidate({ sourceId: '91078', name: 'Action Comics', startYear: 2016, firstIssueNumber: '957', lastIssueNumber: '1104' }),
+      ]
+    );
+    expect(candidates.map((c) => c.sourceId)).toEqual(['91078', '18005', '42563']);
+  });
+
+  it('allows a year of new issues past the listed last issue', () => {
+    const { candidates } = filterCandidates(
+      group({ series: 'Wolverine', publisher: 'Marvel', books: [{ bookId: 1, number: '55', publishDate: '2024-12-04' }] }),
+      [
+        candidate({ sourceId: 'old', name: 'Wolverine', publisher: 'Marvel', startYear: 2013, firstIssueNumber: '1', lastIssueNumber: '13' }),
+        candidate({ sourceId: 'lagging', name: 'Wolverine', publisher: 'Marvel', startYear: 2020, firstIssueNumber: '1', lastIssueNumber: '50' }),
+      ]
+    );
+    expect(candidates[0].sourceId).toBe('lagging');
   });
 
   it('checks runs that started closest to the estimated start first', () => {
@@ -202,6 +224,11 @@ describe('estimatedRunStart', () => {
     expect(estimatedRunStart({ bookId: 1, number: '0', publishDate: '2022-03-09' })).toBe('2022-03-09');
     expect(estimatedRunStart({ bookId: 1, number: '1.MU', publishDate: '2022-03-09' })).toBe('2022-03-09');
     expect(estimatedRunStart({ bookId: 1, number: '25', publishDate: null })).toBeNull();
+  });
+
+  it('counts back from a legacy first issue', () => {
+    // Action Comics (2016) starts at #957: #1041 is 84 issues (7 years) later.
+    expect(estimatedRunStart({ bookId: 1, number: '1041', publishDate: '2022-03-22' }, 957)).toBe('2015-03-22');
   });
 });
 

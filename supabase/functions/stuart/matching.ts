@@ -8,6 +8,9 @@ export interface VolumeCandidate {
   publisher: string | null;
   countOfIssues: number | null;
   siteUrl: string | null;
+  /** First and last issue numbers in the volume (legacy runs start high: Action Comics 2016 is #957–). */
+  firstIssueNumber?: string | null;
+  lastIssueNumber?: string | null;
 }
 
 export interface BookGroup {
@@ -184,19 +187,34 @@ export function filterCandidates(group: BookGroup, all: readonly VolumeCandidate
     candidates.push(c);
   }
 
-  // Runs that started closest to the estimated start first (issue #n is about
-  // n-1 months after #1). Only a ranking: legacy numbering and twice-monthly
-  // books don't follow it, and the issue-date check decides. Without an
-  // estimate, or on a tie, the newer run, then the plainer title ("Buffy …
-  // Season Nine" before "Buffy … Season Nine: Guarded").
+  // Most likely runs first, using the probe comic's number and date:
+  //  1. runs whose issue range covers the number (ComicVine can lag on new
+  //     issues, so allow a year past the listed last issue);
+  //  2. runs that started closest to when this one probably did: issue #n is
+  //     about (n - first) months after the run's first issue, so legacy runs
+  //     that start high (Action Comics 2016 begins at #957) still estimate right.
+  // Only an ordering: twice-monthly runs drift, and the issue-date check decides.
+  // Then the newer run, then the plainer title ("Buffy … Season Nine" before
+  // "Buffy … Season Nine: Guarded").
   const probe = pickProbeBook(group);
   const estimatedStart = probe ? estimatedRunStart(probe) : null;
-  const estYear = yearOf(estimatedStart);
-  const distance = (c: VolumeCandidate) =>
-    estYear != null && c.startYear != null ? Math.abs(c.startYear - estYear) : Number.POSITIVE_INFINITY;
+  const wantNumber = probe ? issueNumberValue(probe.number) : null;
+  const rangeMiss = (c: VolumeCandidate) => {
+    const first = issueNumberValue(c.firstIssueNumber);
+    const last = issueNumberValue(c.lastIssueNumber);
+    if (wantNumber == null || first == null || last == null) return 0.5;
+    return wantNumber >= first && wantNumber <= last + 12 ? 0 : 1;
+  };
+  const distance = (c: VolumeCandidate) => {
+    const estYear = probe ? yearOf(estimatedRunStart(probe, issueNumberValue(c.firstIssueNumber) ?? 1)) : null;
+    return estYear != null && c.startYear != null ? Math.abs(c.startYear - estYear) : Number.POSITIVE_INFINITY;
+  };
   candidates.sort(
     (a, b) =>
-      distance(a) - distance(b) || (b.startYear ?? 0) - (a.startYear ?? 0) || a.name.length - b.name.length
+      rangeMiss(a) - rangeMiss(b) ||
+      distance(a) - distance(b) ||
+      (b.startYear ?? 0) - (a.startYear ?? 0) ||
+      a.name.length - b.name.length
   );
   // Report the informative rejections (publisher, year) before "title differs".
   rejected.sort((a, b) => Number(a.reason === 'title differs') - Number(b.reason === 'title differs'));
@@ -289,17 +307,24 @@ export function compareDates(bookDate: string | null, storeDate: string | null, 
   return { solid: best.solid, days: best.days, basis: best.basis, releaseDate: best.date };
 }
 
+/** Numeric value of an issue number ("013" → 13, "1.MU" → 1); null when it isn't numeric. */
+export function issueNumberValue(number: string | null | undefined): number | null {
+  const n = Number.parseFloat(normalizeIssueNumber(number) ?? '');
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
  * When a monthly run that reached this issue probably began: issue #n comes
- * out about n-1 months after #1 (#13 dated 2022-03-09 → about 2021-03).
- * Null for non-numeric issue numbers.
+ * out about (n - first) months after the run's first issue, #1 by default
+ * (#13 dated 2022-03-09 → about 2021-03). Null without a date; the comic's own
+ * date for non-numeric or out-of-range numbers.
  */
-export function estimatedRunStart(book: GroupBook): string | null {
+export function estimatedRunStart(book: GroupBook, firstIssue = 1): string | null {
   if (!book.publishDate) return null;
-  const n = Number.parseFloat(normalizeIssueNumber(book.number) ?? '');
-  if (!Number.isFinite(n) || n < 1) return book.publishDate;
+  const n = issueNumberValue(book.number);
+  if (n == null || n < firstIssue) return book.publishDate;
   const date = new Date(`${book.publishDate}T00:00:00Z`);
-  date.setUTCMonth(date.getUTCMonth() - (Math.floor(n) - 1));
+  date.setUTCMonth(date.getUTCMonth() - Math.floor(n - firstIssue));
   return date.toISOString().slice(0, 10);
 }
 
