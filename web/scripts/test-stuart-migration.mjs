@@ -6,6 +6,7 @@ const read = (name) => readFileSync(new URL(`../../supabase/migrations/${name}`,
 const pullList = read('0011_pull_list.sql');
 const stuart = read('0012_stuart_metadata.sql');
 const aliasesAndSkips = read('0014_stuart_aliases_and_skips.sql');
+const volumeStore = read('0015_stuart_volume_store.sql');
 
 const baseSchema = `
   create role anon;
@@ -196,6 +197,37 @@ async function testStuartMigration() {
     await scalar(db, `select has_function_privilege('anon', 'public.stuart_skip_book(integer,text)', 'EXECUTE')`),
     false
   );
+
+  // 0015: local volume/issue store.
+  await db.exec(volumeStore);
+  await db.exec(volumeStore); // idempotent
+  const store = await scalar(db, `select stuart_upsert_series_volume($1::jsonb)`, [
+    JSON.stringify({ source: 'comicvine', source_id: '125121', name: 'Wolverine', start_year: 2020, publisher: 'Marvel',
+      first_issue_number: '1', last_issue_number: '50', details_synced: true }),
+  ]);
+  const synced = await db.query(`select details_synced_at is not null as details, issues_synced_at is null as no_issues, first_issue_number from series_volume where series_volume_id = $1`, [store]);
+  assert.deepEqual(synced.rows[0], { details: true, no_issues: true, first_issue_number: '1' });
+
+  await db.query(`select stuart_replace_volume_issues($1, $2::jsonb)`, [store, JSON.stringify([
+    { source_issue_id: '886940', issue_number: '16', store_date: '2021-09-29', cover_date: '2021-11-01' },
+    { source_issue_id: '999', issue_number: '99', store_date: '2030-01-01', cover_date: null },
+  ])]);
+  await db.query(`update series_volume_issue set storylines = '[{"source_id":"61118","name":"Trials of X"}]' where source_issue_id = '886940'`);
+  // A refetch keeps stored arcs, updates dates and drops issues that are gone.
+  await db.query(`select stuart_replace_volume_issues($1, $2::jsonb)`, [store, JSON.stringify([
+    { source_issue_id: '886940', issue_number: '16', store_date: '2021-09-29', cover_date: '2021-11-02' },
+  ])]);
+  assert.deepEqual(
+    (await db.query(`select source_issue_id, cover_date::text, storylines->0->>'name' as arc from series_volume_issue`)).rows,
+    [{ source_issue_id: '886940', cover_date: '2021-11-02', arc: 'Trials of X' }]
+  );
+  // A later upsert without flags or a first issue keeps both.
+  await db.query(`select stuart_upsert_series_volume($1::jsonb)`, [
+    JSON.stringify({ source: 'comicvine', source_id: '125121', name: 'Wolverine', start_year: 2020, publisher: 'Marvel' }),
+  ]);
+  const kept = await db.query(`select details_synced_at is not null as details, issues_synced_at is not null as issues, first_issue_number from series_volume where series_volume_id = $1`, [store]);
+  assert.deepEqual(kept.rows[0], { details: true, issues: true, first_issue_number: '1' });
+  assert.equal(await scalar(db, `select has_table_privilege('anon', 'public.series_volume_issue', 'SELECT')`), false);
 
   // Deleting a series_volume unlinks books rather than deleting them.
   await db.query(`delete from series_volume where series_volume_id = $1`, [silk]);

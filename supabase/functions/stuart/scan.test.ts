@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StopRun, type GroupResult, type SeriesAdapter, type StorylineInfo, type VolumeInfo } from './adapter.ts';
 import type { BookGroup, SeriesAlias } from './matching.ts';
+import { MemoryVolumeCache } from './cache.ts';
 import { runScan, type PendingBookRow, type ScanError, type StuartStore } from './scan.ts';
 
 class MemoryStore implements StuartStore {
@@ -16,6 +17,9 @@ class MemoryStore implements StuartStore {
 
   async pendingBooks() {
     return this.rows;
+  }
+  async volumeCache() {
+    return new MemoryVolumeCache();
   }
   async aliases() {
     return this.aliasList;
@@ -59,6 +63,7 @@ const volume = (name: string): VolumeInfo => ({
   startYear: 2020,
   publisher: 'Marvel',
   countOfIssues: 10,
+  firstIssueNumber: '1',
   lastIssueNumber: '10',
   lastIssueDate: '2021-01-01',
   isOngoing: false,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { StopRun } from './adapter.ts';
+import { MemoryVolumeCache } from './cache.ts';
 import { ComicVineAdapter } from './comicvine.ts';
 import type { BookGroup } from './matching.ts';
 
@@ -77,7 +78,7 @@ function catwomanRoutes(): Record<string, Route> {
 describe('ComicVineAdapter', () => {
   it('matches a group by verifying the issue date, then maps issues and story arcs', async () => {
     const { fetchFn, calls } = fakeComicVine(catwomanRoutes());
-    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() });
 
     expect(result.kind).toBe('matched');
     if (result.kind !== 'matched') return;
@@ -113,7 +114,7 @@ describe('ComicVineAdapter', () => {
     const routes = catwomanRoutes();
     routes['volume/4050-200/'] = () => catwomanVolumes[1];
     const { fetchFn, calls } = fakeComicVine(routes);
-    const result = await adapter(fetchFn).resolve(group, { knownSourceId: '200', knownStorylineIds: new Set(['9']) });
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: '200', knownStorylineIds: new Set(['9']), cache: new MemoryVolumeCache() });
 
     expect(result.kind).toBe('matched');
     expect(calls.some((c) => c.pathname.endsWith('/search/'))).toBe(false);
@@ -124,7 +125,7 @@ describe('ComicVineAdapter', () => {
     const routes = catwomanRoutes();
     routes['issues/'] = () => [{ id: 1, issue_number: '31', store_date: '2021-10-20', cover_date: null }];
     const { fetchFn } = fakeComicVine(routes);
-    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() });
 
     expect(result).toMatchObject({ kind: 'failed', code: 'no_date_match' });
     if (result.kind === 'failed') {
@@ -145,7 +146,7 @@ describe('ComicVineAdapter', () => {
     };
     routes['issue/4000-9/'] = () => ({ id: 9, story_arc_credits: [] });
     const { fetchFn } = fakeComicVine(routes);
-    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() });
 
     expect(result.kind === 'matched' && result.volume.sourceId).toBe('100');
   });
@@ -161,7 +162,7 @@ describe('ComicVineAdapter', () => {
           ]
         : base(url);
     const { fetchFn } = fakeComicVine(routes);
-    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() });
 
     expect(result.kind).toBe('matched');
     if (result.kind !== 'matched') return;
@@ -175,7 +176,7 @@ describe('ComicVineAdapter', () => {
     const { fetchFn, calls } = fakeComicVine(catwomanRoutes());
     const result = await adapter(fetchFn).resolve(
       { ...group, books: [{ bookId: 1, number: '31', publishDate: null }] },
-      { knownSourceId: null, knownStorylineIds: new Set() }
+      { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() }
     );
     expect(result).toMatchObject({ kind: 'failed', code: 'no_date' });
     expect(calls.map((c) => c.pathname)).toEqual(['/api/search/']);
@@ -188,7 +189,7 @@ describe('ComicVineAdapter', () => {
     });
     const result = await adapter(fetchFn).resolve(
       { series: 'Buffy Season 9', volume: null, publisher: 'Dark Horse Comics', books: [{ bookId: 1, number: '1', publishDate: '2011-09-14' }] },
-      { knownSourceId: null, knownStorylineIds: new Set() }
+      { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() }
     );
 
     // Search, name filter, then the issue lookup (store and cover date, ±1 month then ±1 quarter).
@@ -205,7 +206,7 @@ describe('ComicVineAdapter', () => {
     });
     const result = await adapter(fetchFn).resolve(
       { series: 'Buffy Season 9', volume: null, publisher: 'Dark Horse Comics', books: [{ bookId: 1, number: '1', publishDate: '2011-09-14' }] },
-      { knownSourceId: null, knownStorylineIds: new Set() }
+      { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() }
     );
     expect(result.kind === 'matched' && result.volume.name).toBe('Buffy the Vampire Slayer Season Nine');
   });
@@ -220,7 +221,7 @@ describe('ComicVineAdapter', () => {
         books: [{ bookId: 1, number: '1', publishDate: null }],
         alias: { alias: 'Buffy Classic', title: 'Buffy the Vampire Slayer', startYear: 1998, publisher: 'Dark Horse Comics' },
       },
-      { knownSourceId: null, knownStorylineIds: new Set() }
+      { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() }
     );
     expect(calls[0].searchParams.get('query')).toBe('Buffy the Vampire Slayer');
   });
@@ -247,7 +248,7 @@ describe('ComicVineAdapter', () => {
 
     const result = await adapter(fetchFn).resolve(
       { series: 'Batman', volume: null, publisher: 'DC Comics', books: [{ bookId: 1, number: '109', publishDate: '2021-06-01' }] },
-      { knownSourceId: null, knownStorylineIds: new Set() }
+      { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() }
     );
 
     expect(result.kind === 'matched' && [result.volume.sourceId, result.volume.startYear]).toEqual(['91273', 2016]);
@@ -263,7 +264,7 @@ describe('ComicVineAdapter', () => {
       return [{ id: 1, issue_number: '31', store_date: '2019-01-01', cover_date: null }];
     };
     const { fetchFn } = fakeComicVine(routes);
-    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() });
 
     expect(result).toMatchObject({ kind: 'failed', code: 'no_date_match' });
     if (result.kind === 'failed') {
@@ -282,7 +283,7 @@ describe('ComicVineAdapter', () => {
   it('stops before going over the hourly limit for a resource', async () => {
     const { fetchFn } = fakeComicVine(catwomanRoutes());
     const error = await adapter(fetchFn, { remainingByResource: { search: 0 } })
-      .resolve(group, { knownSourceId: null, knownStorylineIds: new Set() })
+      .resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(StopRun);
     expect(error).toMatchObject({ code: 'budget_exhausted', fatal: false });
@@ -294,7 +295,7 @@ describe('ComicVineAdapter', () => {
       'search/': () => ({ status_code: 100, error: 'Invalid API Key', number_of_total_results: 0, results: [] }),
     });
     const error = await adapter(fetchFn)
-      .resolve(group, { knownSourceId: null, knownStorylineIds: new Set() })
+      .resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(StopRun);
     expect(error).toMatchObject({ code: 'invalid_api_key', fatal: true });
@@ -306,6 +307,7 @@ describe('ComicVineAdapter', () => {
     const result = await adapter(fetchFn, { maxRequests: 4 }).resolve(group, {
       knownSourceId: null,
       knownStorylineIds: new Set(),
+      cache: new MemoryVolumeCache(),
     });
 
     expect(result.kind).toBe('matched');
@@ -327,8 +329,111 @@ describe('ComicVineAdapter', () => {
         clock += ms;
       },
     });
-    await cv.resolve(group, { knownSourceId: null, knownStorylineIds: new Set() });
+    await cv.resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache: new MemoryVolumeCache() });
     expect(waits.length).toBeGreaterThan(0);
     expect(waits.every((ms) => ms === 1100)).toBe(true);
+  });
+});
+
+describe('ComicVineAdapter with Stuart\'s stored volumes', () => {
+  const stored = {
+    sourceId: '200',
+    name: 'Catwoman',
+    startYear: 2018,
+    publisher: 'DC Comics',
+    countOfIssues: 70,
+    siteUrl: 'cv/200',
+    firstIssueNumber: '1',
+    lastIssueNumber: '70',
+    lastIssueDate: '2024-01-01',
+    isOngoing: false,
+    detailsSyncedAt: '2024-02-01T00:00:00Z',
+    issuesSyncedAt: '2024-02-01T00:00:00Z',
+  };
+  const storedIssues = () => [
+    { sourceIssueId: '31', issueNumber: '31', storeDate: '2021-05-18', coverDate: '2021-07-01', storylines: [{ sourceId: '9', name: 'Fear State' }] },
+    { sourceIssueId: '32', issueNumber: '32', storeDate: '2021-06-15', coverDate: '2021-08-01', storylines: null },
+  ];
+
+  it('matches from the store without asking ComicVine, fetching only missing story arcs', async () => {
+    const { fetchFn, calls } = fakeComicVine(catwomanRoutes());
+    const cache = new MemoryVolumeCache([stored], { '200': storedIssues() });
+    const cv = adapter(fetchFn);
+
+    const result = await cv.resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache });
+
+    expect(result.kind === 'matched' && result.volume.sourceId).toBe('200');
+    if (result.kind !== 'matched') return;
+    expect(result.issues.map((i) => [i.bookId, i.sourceIssueId, i.storylines.map((s) => s.name)])).toEqual([
+      [1, '31', ['Fear State']],
+      [2, '32', []],
+    ]);
+    // Only #32's arcs were unknown.
+    expect(calls.map((c) => c.pathname)).toEqual(['/api/issue/4000-32/']);
+    // Its (empty) arc list is now stored too, and the finished run's details weren't refetched.
+    expect((await cache.issues('200'))!.find((i) => i.sourceIssueId === '32')!.storylines).toEqual([]);
+    expect(cache.saved.at(-1)).toMatchObject({ detailsSynced: false, issues: undefined });
+    expect(cv.requestCounts()).toEqual({ issue: 1, cache_hits: 1 });
+  });
+
+  it('verifies a stored volume with one issue lookup when its issues were never stored', async () => {
+    const { fetchFn, calls } = fakeComicVine(catwomanRoutes());
+    const cache = new MemoryVolumeCache([{ ...stored, issuesSyncedAt: null }]);
+
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(['9']), cache });
+
+    expect(result.kind === 'matched' && result.volume.sourceId).toBe('200');
+    expect(calls.map((c) => `${c.pathname} ${c.searchParams.get('filter') ?? ''}`.trim())).toEqual([
+      '/api/issues/ volume:200,issue_number:31',
+      '/api/issues/ volume:200',
+      '/api/issue/4000-31/',
+      '/api/issue/4000-32/',
+    ]);
+    // The issue list is now stored.
+    expect(cache.saved.at(-1)!.issues!.map((i) => i.issueNumber)).toEqual(['31', '32', '70']);
+  });
+
+  it('refreshes an ongoing run whose stored details are over a month old', async () => {
+    const routes = catwomanRoutes();
+    routes['volume/4050-200/'] = () => catwomanVolumes[1];
+    const { fetchFn, calls } = fakeComicVine(routes);
+    const cache = new MemoryVolumeCache(
+      [{ ...stored, isOngoing: true, detailsSyncedAt: '2026-09-01T00:00:00Z' }],
+      { '200': storedIssues() }
+    );
+
+    await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(['9']), cache });
+
+    expect(calls[0].pathname).toBe('/api/volume/4050-200/');
+    expect(cache.saved.at(-1)).toMatchObject({ detailsSynced: true });
+  });
+
+  it('refetches an ongoing run\'s issue list for a number it doesn\'t have yet', async () => {
+    const { fetchFn, calls } = fakeComicVine(catwomanRoutes());
+    const cache = new MemoryVolumeCache(
+      [{ ...stored, isOngoing: true, detailsSyncedAt: '2026-11-01T00:00:00Z' }],
+      { '200': storedIssues().slice(0, 1) }
+    );
+
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(['9']), cache });
+
+    expect(result.kind === 'matched' && result.issues.map((i) => i.sourceIssueId)).toEqual(['31', '32']);
+    expect(calls.some((c) => c.searchParams.get('filter') === 'volume:200')).toBe(true);
+    // Arcs already stored for #31 survive the refresh.
+    expect((await cache.issues('200'))!.find((i) => i.sourceIssueId === '31')!.storylines).toEqual([{ sourceId: '9', name: 'Fear State' }]);
+  });
+
+  it('falls back to ComicVine search when no stored volume fits the date', async () => {
+    const { fetchFn, calls } = fakeComicVine(catwomanRoutes());
+    const cache = new MemoryVolumeCache(
+      [{ ...stored, sourceId: '100', startYear: 2011, lastIssueNumber: '52' }],
+      { '100': [{ sourceIssueId: 'x', issueNumber: '31', storeDate: '2014-05-01', coverDate: null, storylines: [] }] }
+    );
+
+    const result = await adapter(fetchFn).resolve(group, { knownSourceId: null, knownStorylineIds: new Set(), cache });
+
+    expect(result.kind === 'matched' && result.volume.sourceId).toBe('200');
+    expect(calls[0].pathname).toBe('/api/search/');
+    expect(cache.volumes.map((v) => v.sourceId).sort()).toEqual(['100', '200']);
   });
 });

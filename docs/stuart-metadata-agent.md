@@ -48,9 +48,21 @@ as the reading-list date and within **92 days** (about a quarter). The release
 date is ComicVine's store date; when only a cover date exists, it's tried both
 as-is and moved back two months (publishers differ), and the closer one counts.
 
+**Stuart's own store comes first.** Every volume it has looked up is kept in
+`series_volume` (with its first/last issue numbers), and its issues in
+`series_volume_issue` (number, store and cover date, and story arcs once
+fetched). Volume details and issue dates almost never change, so a comic that
+fits a stored volume is matched without calling ComicVine. ComicVine is only
+asked when no stored volume fits, when an ongoing run needs an issue number it
+doesn't have yet (one refresh of its issue list), for a matched issue's story
+arcs the first time, and to refresh an ongoing run's details every 30 days
+(finished runs never). Batches record matches made from the store as
+`cache_hits` in `stuart_run.requests`.
+
 For each group of pending books with the same series/volume/publisher text:
 
-1. Reuse the ComicVine volume already matched for that group, if any.
+1. Reuse the ComicVine volume already matched for that group, if any; otherwise
+   try the stored volumes with the same title rules, ranking and date check.
 2. Otherwise search ComicVine for volumes (`/search`, which ranks exact titles
    first; the substring `/volumes?filter=name:…` is a fallback). Keep volumes
    whose **title** matches, ignoring case, punctuation, a leading "The" and
@@ -105,6 +117,7 @@ publisher and publish date are filled when that can't collide with another book)
 | `stuart_scan_error` | Failures per comic, with adapter, code, message and details; `cleared_at` is set once the comic later matches |
 | `stuart_config` | Enabled flag, function URL, time zone and nightly window |
 | `stuart_series_alias` | Reading-list series names → the title/year/publisher to look up |
+| `series_volume_issue` | Stored issues per volume: number, store/cover date, story arcs (service role only) |
 
 On the Pull List, matched comics are grouped under `book_pull_list_key()`:
 the ComicVine name, start year and publisher. Status, family, order and title

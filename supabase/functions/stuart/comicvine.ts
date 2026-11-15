@@ -10,6 +10,8 @@ import {
   StopRun,
   type AdapterContext,
   type BookFailure,
+  type CachedIssue,
+  type CachedVolume,
   type GroupResult,
   type IssueMatch,
   type SeriesAdapter,
@@ -44,6 +46,8 @@ const MAX_VERIFY_CANDIDATES = 5;
 const MAX_ISSUE_LOOKUP_RESULTS = 200;
 /** Issue lookups try a month either side first, then about a quarter. */
 const ISSUE_LOOKUP_WINDOWS_DAYS = [31, DATE_WINDOW_DAYS];
+/** Stored details of a still-running volume are refreshed after this long; finished runs never. */
+const DETAILS_REFRESH_DAYS = 30;
 
 export interface ComicVineOptions {
   apiKey: string;
@@ -118,6 +122,10 @@ export class ComicVineAdapter implements SeriesAdapter {
   private lastRequestAt = 0;
   private total = 0;
   private readonly counts: Record<string, number> = {};
+  /** Volumes whose issue list was already fetched in this batch (don't fetch twice). */
+  private readonly issuesFetched = new Set<string>();
+  /** Matches made without a ComicVine search, for the run log. */
+  private cacheHits = 0;
 
   constructor(private readonly options: ComicVineOptions) {
     this.fetchFn = options.fetch ?? fetch;
@@ -131,7 +139,7 @@ export class ComicVineAdapter implements SeriesAdapter {
   }
 
   requestCounts(): Record<string, number> {
-    return { ...this.counts };
+    return this.cacheHits > 0 ? { ...this.counts, cache_hits: this.cacheHits } : { ...this.counts };
   }
 
   private remaining(): number {
@@ -347,11 +355,90 @@ export class ComicVineAdapter implements SeriesAdapter {
     return arcs;
   }
 
+  /** A cached volume as ComicVine's shape, for volumes chosen from the store. */
+  private fromCache(v: CachedVolume): CvVolume {
+    return {
+      id: Number(v.sourceId),
+      name: v.name,
+      start_year: v.startYear != null ? String(v.startYear) : null,
+      publisher: v.publisher ? { name: v.publisher } : null,
+      count_of_issues: v.countOfIssues,
+      first_issue: { issue_number: v.firstIssueNumber ?? null },
+      last_issue: { issue_number: v.lastIssueNumber ?? null },
+      site_detail_url: v.siteUrl,
+    };
+  }
+
+  private toCachedIssues(issues: CvIssue[]): CachedIssue[] {
+    return issues.map((i) => ({
+      sourceIssueId: String(i.id),
+      issueNumber: i.issue_number,
+      storeDate: i.store_date,
+      coverDate: i.cover_date,
+      storylines: null,
+    }));
+  }
+
+  private detailsStale(v: CachedVolume): boolean {
+    if (v.isOngoing === false && v.detailsSyncedAt) return false;
+    if (!v.detailsSyncedAt) return true;
+    return (Date.parse(`${this.today}T00:00:00Z`) - Date.parse(v.detailsSyncedAt)) / 86_400_000 > DETAILS_REFRESH_DAYS;
+  }
+
+  /**
+   * Try the volumes Stuart already knows before searching ComicVine: same
+   * title rules and ranking, verified against stored issue dates. A volume
+   * whose issue list was never stored costs one issue lookup to verify, still
+   * cheaper than a search.
+   */
+  private async matchFromCache(group: BookGroup, context: AdapterContext): Promise<CachedVolume | null> {
+    const probe = pickProbeBook(group);
+    if (!probe) return null;
+    const { candidates } = filterCandidates(group, context.cache.volumes);
+    const want = normalizeIssueNumber(probe.number);
+
+    for (const candidate of candidates.slice(0, MAX_VERIFY_CANDIDATES)) {
+      const cached = context.cache.volumes.find((v) => v.sourceId === candidate.sourceId)!;
+      const stored = await context.cache.issues(candidate.sourceId);
+      let issue: { store_date: string | null; cover_date: string | null } | null = null;
+      if (stored) {
+        const hit = stored.find((i) => normalizeIssueNumber(i.issueNumber) === want);
+        if (hit) issue = { store_date: hit.storeDate, cover_date: hit.coverDate };
+        // Not stored: only worth asking ComicVine if the run may have gone on since.
+        else if (cached.isOngoing !== false) issue = await this.issueDates(candidate.sourceId, probe.number!);
+      } else {
+        issue = await this.issueDates(candidate.sourceId, probe.number!);
+      }
+      if (issue && compareDates(probe.publishDate, issue.store_date, issue.cover_date).solid) return cached;
+    }
+    return null;
+  }
+
   async resolve(group: BookGroup, context: AdapterContext): Promise<GroupResult> {
     let chosen: CvVolume | null = null;
+    let cached: CachedVolume | null = null;
+    let detailsFetched = false;
 
     if (context.knownSourceId) {
-      chosen = await this.volumeById(context.knownSourceId);
+      cached = context.cache.volumes.find((v) => v.sourceId === context.knownSourceId) ?? null;
+      if (!cached) {
+        chosen = await this.volumeById(context.knownSourceId);
+        detailsFetched = chosen != null;
+      }
+    }
+
+    // Stuart's own store first.
+    if (!cached && !chosen) {
+      cached = await this.matchFromCache(group, context);
+      if (cached) this.cacheHits += 1;
+    }
+
+    if (cached) {
+      if (this.detailsStale(cached)) {
+        chosen = await this.volumeById(cached.sourceId);
+        detailsFetched = chosen != null;
+      }
+      chosen ??= this.fromCache(cached);
     }
 
     if (!chosen) {
@@ -437,19 +524,39 @@ export class ComicVineAdapter implements SeriesAdapter {
         }
         chosen = byIssue.volume;
       }
+      detailsFetched = true;
+      cached = context.cache.volumes.find((v) => v.sourceId === String(chosen!.id)) ?? null;
     }
 
     const volumeId = String(chosen.id);
-    const issues = await this.allIssues(volumeId);
-    const byNumber = new Map<string, CvIssue>();
+
+    // Issues: the stored list when it covers every comic here (or the run has
+    // ended, so a missing number really is missing); otherwise fetch it once.
+    let issueList: CachedIssue[] | null = await context.cache.issues(volumeId);
+    const wanted = group.books.map((b) => normalizeIssueNumber(b.number)).filter((n): n is string => n != null);
+    const storedNumbers = new Set((issueList ?? []).map((i) => normalizeIssueNumber(i.issueNumber)));
+    const complete = issueList != null && wanted.every((n) => storedNumbers.has(n));
+    const finished = cached?.isOngoing === false && cached.issuesSyncedAt != null;
+    let issuesFetched = false;
+    if ((issueList == null || (!complete && !finished)) && !this.issuesFetched.has(volumeId)) {
+      const fetched = this.toCachedIssues(await this.allIssues(volumeId));
+      this.issuesFetched.add(volumeId);
+      // Keep arcs already stored for issues we had.
+      const arcsById = new Map((issueList ?? []).map((i) => [i.sourceIssueId, i.storylines]));
+      issueList = fetched.map((i) => ({ ...i, storylines: arcsById.get(i.sourceIssueId) ?? null }));
+      issuesFetched = true;
+    }
+    const issues = issueList ?? [];
+
+    const byNumber = new Map<string, CachedIssue>();
     for (const issue of issues) {
-      const n = normalizeIssueNumber(issue.issue_number);
+      const n = normalizeIssueNumber(issue.issueNumber);
       if (n && !byNumber.has(n)) byNumber.set(n, issue);
     }
     const lastIssueDate = issues.reduce<string | null>((max, i) => {
-      const d = i.store_date ?? i.cover_date;
+      const d = i.storeDate ?? i.coverDate;
       return d && (!max || d > max) ? d : max;
-    }, null);
+    }, cached?.lastIssueDate ?? null);
 
     const candidate = this.toCandidate(chosen);
     const volume: VolumeInfo = {
@@ -459,11 +566,13 @@ export class ComicVineAdapter implements SeriesAdapter {
       startYear: candidate.startYear,
       publisher: candidate.publisher,
       countOfIssues: candidate.countOfIssues,
-      lastIssueNumber: chosen.last_issue?.issue_number ?? null,
+      firstIssueNumber: candidate.firstIssueNumber ?? null,
+      lastIssueNumber: candidate.lastIssueNumber ?? null,
       lastIssueDate,
       isOngoing: isOngoing(lastIssueDate, this.today),
       siteUrl: candidate.siteUrl,
     };
+    await context.cache.saveVolume(volume, { detailsSynced: detailsFetched, issues: issuesFetched ? issues : undefined });
 
     const matched: IssueMatch[] = [];
     const bookFailures: BookFailure[] = [];
@@ -478,17 +587,17 @@ export class ComicVineAdapter implements SeriesAdapter {
 
       // Every dated comic must line up with its own issue, not just the one
       // used to pick the volume.
-      const dates = compareDates(book.publishDate, issue.store_date, issue.cover_date);
+      const dates = compareDates(book.publishDate, issue.storeDate, issue.coverDate);
       if (book.publishDate && !dates.solid) {
         bookFailures.push({
           bookId: book.bookId,
           code: 'date_mismatch',
-          message: `${volume.name} (${volume.startYear ?? '?'}) #${issue.issue_number} came out ${dates.releaseDate ?? 'on an unknown date'}, not within ${DATE_WINDOW_DAYS} days of ${book.publishDate} in the same year.`,
+          message: `${volume.name} (${volume.startYear ?? '?'}) #${issue.issueNumber} came out ${dates.releaseDate ?? 'on an unknown date'}, not within ${DATE_WINDOW_DAYS} days of ${book.publishDate} in the same year.`,
           details: {
             volume: { id: volumeId, name: volume.name, start_year: volume.startYear, url: volume.siteUrl },
-            issue_id: String(issue.id),
-            store_date: issue.store_date,
-            cover_date: issue.cover_date,
+            issue_id: issue.sourceIssueId,
+            store_date: issue.storeDate,
+            cover_date: issue.coverDate,
             publish_date: book.publishDate,
             days_apart: dates.days,
           },
@@ -497,11 +606,16 @@ export class ComicVineAdapter implements SeriesAdapter {
       }
 
       try {
-        const storylines = await this.storylinesFor(String(issue.id), context);
+        let storylines = issue.storylines;
+        if (storylines == null) {
+          storylines = await this.storylinesFor(issue.sourceIssueId, context);
+          issue.storylines = storylines;
+          await context.cache.saveStorylines(volumeId, issue.sourceIssueId, storylines);
+        }
         matched.push({
           bookId: book.bookId,
-          sourceIssueId: String(issue.id),
-          publishDate: issue.store_date ?? issue.cover_date ?? null,
+          sourceIssueId: issue.sourceIssueId,
+          publishDate: issue.storeDate ?? issue.coverDate ?? null,
           storylines,
         });
       } catch (error) {

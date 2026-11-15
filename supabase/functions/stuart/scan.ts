@@ -2,7 +2,14 @@
 // and record matches or failures. Storage is behind StuartStore so the loop can
 // be tested without a database (see scan.test.ts).
 
-import { StopRun, type GroupResult, type SeriesAdapter, type StorylineInfo, type VolumeInfo } from './adapter.ts';
+import {
+  StopRun,
+  type GroupResult,
+  type SeriesAdapter,
+  type StorylineInfo,
+  type VolumeCache,
+  type VolumeInfo,
+} from './adapter.ts';
 import { findAlias, groupBooks, skippedFormat, type BookGroup, type SeriesAlias } from './matching.ts';
 
 export interface PendingBookRow {
@@ -24,6 +31,8 @@ export interface ScanError {
 export interface StuartStore {
   pendingBooks(limit: number): Promise<PendingBookRow[]>;
   aliases(): Promise<SeriesAlias[]>;
+  /** Stuart's stored volumes and issues for a source; readOnly for dry runs. */
+  volumeCache(source: string, readOnly: boolean): Promise<VolumeCache>;
   /** Mark a book as not something Stuart matches (e.g. a backup story), clearing its errors. */
   skipBook(bookId: number, reason: string): Promise<void>;
   knownVolume(group: BookGroup): Promise<{ source: string; sourceId: string } | null>;
@@ -92,7 +101,11 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   const aliases = await store.aliases();
 
   const storylineIds = new Map<string, Set<string>>();
-  for (const adapter of adapters) storylineIds.set(adapter.source, await store.knownStorylineIds(adapter.source));
+  const caches = new Map<string, VolumeCache>();
+  for (const adapter of adapters) {
+    storylineIds.set(adapter.source, await store.knownStorylineIds(adapter.source));
+    caches.set(adapter.source, await store.volumeCache(adapter.source, dryRun));
+  }
 
   const reports: GroupReport[] = [];
   let matched = 0;
@@ -134,6 +147,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
         const outcome = await adapter.resolve(group, {
           knownSourceId: known && known.source === adapter.source ? known.sourceId : null,
           knownStorylineIds: storylineIds.get(adapter.source)!,
+          cache: caches.get(adapter.source)!,
         });
         if (outcome.kind === 'matched') {
           result = outcome;
