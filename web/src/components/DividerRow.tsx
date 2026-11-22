@@ -6,11 +6,12 @@ import type { DividerListEntry } from '../lib/types';
 interface Props {
   entry: DividerListEntry;
   orderingDisabled: boolean;
+  readOnly?: boolean;
   onSave: (entryId: number, dividerName: string) => Promise<void>;
   onDelete: (entryId: number, dividerName: string) => void;
 }
 
-export function DividerRow({ entry, orderingDisabled, onSave, onDelete }: Props) {
+export function DividerRow({ entry, orderingDisabled, readOnly = false, onSave, onDelete }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.divider_name);
   const [saving, setSaving] = useState(false);
@@ -25,6 +26,7 @@ export function DividerRow({ entry, orderingDisabled, onSave, onDelete }: Props)
   }, [entry.divider_name]);
 
   function startEdit() {
+    if (readOnly) return;
     setDraft(entry.divider_name);
     setError(null);
     setEditing(true);
@@ -103,14 +105,16 @@ export function DividerRow({ entry, orderingDisabled, onSave, onDelete }: Props)
       ) : (
         <span className="section-divider-name">
           {entry.divider_name}
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={`Edit divider ${entry.divider_name}`}
-            onClick={startEdit}
-          >
-            ✏️
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={`Edit divider ${entry.divider_name}`}
+              onClick={startEdit}
+            >
+              ✏️
+            </button>
+          )}
         </span>
       )}
 
@@ -121,6 +125,7 @@ export function DividerRow({ entry, orderingDisabled, onSave, onDelete }: Props)
         className="drag-handle"
         aria-label="Drag to reorder"
         disabled={orderingDisabled}
+        title={readOnly ? 'Requires network' : undefined}
         {...attributes}
         {...listeners}
       >
@@ -131,7 +136,8 @@ export function DividerRow({ entry, orderingDisabled, onSave, onDelete }: Props)
         type="button"
         className="book-delete-button"
         aria-label={`Remove divider "${entry.divider_name}" from list`}
-        title="Remove from list"
+        title={readOnly ? 'Requires network' : 'Remove from list'}
+        disabled={readOnly}
         onClick={() => onDelete(entry.entry_id, entry.divider_name)}
       >
         🗑

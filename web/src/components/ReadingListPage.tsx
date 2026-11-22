@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -37,6 +37,12 @@ import {
   writeHideReadPreference,
 } from '../lib/listOrder';
 import { snapshotFromEntries } from '../lib/listSnapshot';
+import {
+  readCachedListDetail,
+  readCachedLocations,
+  writeCachedListDetail,
+  writeCachedLocations,
+} from '../lib/readingListCache';
 import { calculateCurrentDateGap } from '../lib/currentDateGap';
 import { calculateHistoricReadingStats, type HistoricReadingStats } from '../lib/historicReadingStats';
 import { calculateListReadingStats, calculateReadingActivity, type ReadingActivity } from '../lib/readingStats';
@@ -50,10 +56,20 @@ import { ReadingStats } from './ReadingStats';
 
 interface Props {
   listId: number;
+  /** When true, block mutations (offline / read-only mode). */
+  readOnly?: boolean;
   onListRenamed?: () => void;
+  /** Notify the shell when this page is serving cached data after a failed fetch. */
+  onServingFromCacheChange?: (fromCache: boolean) => void;
 }
 
-export function ReadingListPage({ listId, onListRenamed }: Props) {
+function requireOnline(readOnly: boolean): boolean {
+  if (!readOnly) return true;
+  alert('This action requires a network connection.');
+  return false;
+}
+
+export function ReadingListPage({ listId, readOnly = false, onListRenamed, onServingFromCacheChange }: Props) {
   const [listName, setListName] = useState('');
   const [entries, setEntries] = useState<ListEntry[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
@@ -64,6 +80,10 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [reverting, setReverting] = useState(false);
   const [hideRead, setHideRead] = useState(() => readHideReadPreference(listId));
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  const onServingFromCacheChangeRef = useRef(onServingFromCacheChange);
+  onServingFromCacheChangeRef.current = onServingFromCacheChange;
 
   useEffect(() => {
     setHideRead(readHideReadPreference(listId));
@@ -75,20 +95,46 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  function hydrateFromCache(silent: boolean, markAsCache: boolean): boolean {
+    const cached = readCachedListDetail(listId);
+    const locs = readCachedLocations();
+    if (locs) setLocations(locs);
+    if (!cached) return false;
+    setListName(cached.list.list_name);
+    setEntries(cached.entries);
+    if (!silent) {
+      setSnapshot(snapshotFromEntries(cached.list.list_name, cached.entries));
+    }
+    setError(null);
+    if (markAsCache) onServingFromCacheChangeRef.current?.(true);
+    return true;
+  }
+
   async function load(options?: { silent?: boolean }) {
     const silent = options?.silent ?? false;
     if (!silent) setLoading(true);
     setError(null);
-    loadHistoricStats();
+    void loadHistoricStats();
     try {
       const [{ list, entries: fetchedEntries }, locs] = await Promise.all([fetchListDetail(listId), fetchLocations()]);
       setListName(list.list_name);
       setEntries(fetchedEntries);
       setLocations(locs);
+      writeCachedListDetail(listId, list, fetchedEntries);
+      writeCachedLocations(locs);
+      onServingFromCacheChangeRef.current?.(false);
       if (!silent) {
         setSnapshot(snapshotFromEntries(list.list_name, fetchedEntries));
       }
     } catch (e) {
+      if (silent && entriesRef.current.length > 0) {
+        // Keep the last successful view on a quiet refresh failure.
+        onServingFromCacheChangeRef.current?.(true);
+        return;
+      }
+      if (hydrateFromCache(silent, true)) {
+        return;
+      }
       if (!silent) {
         setError(e instanceof Error ? e.message : 'Failed to load reading list.');
       }
@@ -110,28 +156,40 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   useEffect(() => {
-    load();
+    // Prefer a warm cache paint, then refresh from the network when possible.
+    // Do not mark "using cache" until a fetch actually fails.
+    const hadCache = hydrateFromCache(false, false);
+    if (hadCache) setLoading(false);
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId]);
 
   // Refresh when the tab becomes visible (e.g. after adding comics in the extension)
   // and poll quietly while the tab is open so changes appear without a manual reload.
   useEffect(() => {
+    function refreshIfOnline() {
+      if (navigator.onLine) {
+        void load({ silent: true });
+      }
+    }
+
     function onVisibilityChange() {
       if (document.visibilityState === 'visible') {
-        load({ silent: true });
+        refreshIfOnline();
       }
     }
 
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('online', refreshIfOnline);
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
-        load({ silent: true });
+        refreshIfOnline();
       }
     }, 20000);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('online', refreshIfOnline);
       window.clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,6 +210,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function persistOrder(reorderedIds: number[]) {
+    if (!requireOnline(readOnly)) return;
     const mergedIds = mergeVisibleEntryOrder(entries, reorderedIds, hideRead);
     setEntries((prev) => {
       const byId = new Map(prev.map((entry) => [entry.entry_id, entry]));
@@ -161,17 +220,19 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
       await reorderListEntries(listId, mergedIds);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to reorder.');
-      load();
+      void load();
     }
   }
 
   async function handleTitleSave(newTitle: string) {
+    if (!requireOnline(readOnly)) return;
     await updateListTitle(listId, newTitle);
     setListName(newTitle);
     onListRenamed?.();
   }
 
   async function handleToggleComplete(bookId: number, completed: boolean) {
+    if (!requireOnline(readOnly)) return;
     setEntries((prev) =>
       prev.map((entry) =>
         isBookEntry(entry) && entry.book_id === bookId
@@ -188,14 +249,15 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
     );
     try {
       await setBookCompleted(bookId, completed);
-      loadHistoricStats();
+      void loadHistoricStats();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to update.');
-      load();
+      void load();
     }
   }
 
   async function handleLocationChange(bookId: number, slot: 1 | 2 | 3, locationId: number | null) {
+    if (!requireOnline(readOnly)) return;
     const field = (['location1_id', 'location2_id', 'location3_id'] as const)[slot - 1];
     setEntries((prev) =>
       prev.map((entry) =>
@@ -208,25 +270,28 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
       await setBookLocation(bookId, slot, locationId);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to update location.');
-      load();
+      void load();
     }
   }
 
   function handleMove(entryId: number, direction: 'up' | 'down') {
+    if (!requireOnline(readOnly)) return;
     const reordered = computeStepReorder(visibleEntryIds, entryId, direction);
     if (!reordered) return;
-    persistOrder(reordered);
+    void persistOrder(reordered);
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    if (readOnly) return;
     const { active, over } = event;
     if (!over) return;
     const reordered = computeDragReorder(visibleEntryIds, Number(active.id), Number(over.id));
     if (!reordered) return;
-    persistOrder(reordered);
+    void persistOrder(reordered);
   }
 
   async function handleRemove(entryId: number, title: string) {
+    if (!requireOnline(readOnly)) return;
     if (!window.confirm(`Remove "${title}" from this list?`)) return;
     const previousEntries = entries;
     setEntries((prev) => prev.filter((entry) => entry.entry_id !== entryId));
@@ -239,6 +304,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function handleInsertDivider(beforeEntryId: number, belowBook: Book) {
+    if (!requireOnline(readOnly)) return;
     const name = defaultDividerName(belowBook);
     // Under hide-read, beforeEntryId is the visible unread comic the divider
     // should precede — that maps 1:1 to the full-list insert target.
@@ -252,6 +318,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function handleUpdateDivider(entryId: number, dividerName: string) {
+    if (!requireOnline(readOnly)) return;
     await updateSectionDivider(entryId, dividerName);
     setEntries((prev) =>
       prev.map((entry) =>
@@ -263,6 +330,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function handleAddNote(bookId: number, text: string) {
+    if (!requireOnline(readOnly)) return;
     try {
       const note = await addNote(bookId, text);
       setEntries((prev) =>
@@ -278,6 +346,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function handleUpdateNote(noteId: number, text: string) {
+    if (!requireOnline(readOnly)) return;
     const previousEntries = entries;
     setEntries((prev) =>
       prev.map((entry) =>
@@ -303,6 +372,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function handleDeleteNote(noteId: number) {
+    if (!requireOnline(readOnly)) return;
     const previousEntries = entries;
     setEntries((prev) =>
       prev.map((entry) =>
@@ -337,6 +407,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   }
 
   async function handleRevert() {
+    if (!requireOnline(readOnly)) return;
     if (!snapshot) return;
     if (!window.confirm('Revert all changes made since this page was loaded?')) return;
     setReverting(true);
@@ -353,11 +424,13 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
   if (loading) return <div className="app-status">Loading list…</div>;
   if (error) return <div className="app-status app-status-error">{error}</div>;
 
+  const orderingDisabled = readOnly || hideRead;
+
   return (
     <div className="reading-list-page">
       <div className="list-toolbar">
         <div className="list-toolbar-title">
-          <EditableTitle title={listName} onSave={handleTitleSave} />
+          <EditableTitle title={listName} onSave={handleTitleSave} disabled={readOnly} />
         </div>
         <HideReadToggle checked={hideRead} onChange={handleHideReadChange} />
       </div>
@@ -377,7 +450,7 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                 {entry.entry_type === 'book' && (
                   <DividerInsertZone
                     label={`Insert section divider above ${entry.book.series}`}
-                    disabled={false}
+                    disabled={readOnly}
                     onInsert={() => void handleInsertDivider(entry.entry_id, entry.book)}
                   />
                 )}
@@ -389,7 +462,8 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                     locations={locations}
                     isFirst={idx === 0}
                     isLast={idx === visibleEntries.length - 1}
-                    orderingDisabled={false}
+                    orderingDisabled={orderingDisabled}
+                    readOnly={readOnly}
                     onToggleComplete={handleToggleComplete}
                     onMove={handleMove}
                     onLocationChange={handleLocationChange}
@@ -403,7 +477,8 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
                   <DividerRow
                     key={entry.entry_id}
                     entry={entry}
-                    orderingDisabled={false}
+                    orderingDisabled={orderingDisabled}
+                    readOnly={readOnly}
                     onSave={handleUpdateDivider}
                     onDelete={handleRemove}
                   />
@@ -420,7 +495,13 @@ export function ReadingListPage({ listId, onListRenamed }: Props) {
         </SortableContext>
       </DndContext>
 
-      <button type="button" className="revert-button" onClick={handleRevert} disabled={reverting}>
+      <button
+        type="button"
+        className="revert-button"
+        onClick={handleRevert}
+        disabled={reverting || readOnly}
+        title={readOnly ? 'Requires network' : undefined}
+      >
         {reverting ? 'Reverting…' : 'Revert'}
       </button>
     </div>

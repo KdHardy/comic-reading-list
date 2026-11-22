@@ -3,15 +3,17 @@ import { useState } from 'react';
 interface Props {
   title: string;
   onSave: (newTitle: string) => Promise<void>;
+  disabled?: boolean;
 }
 
-export function EditableTitle({ title, onSave }: Props) {
+export function EditableTitle({ title, onSave, disabled = false }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   function startEdit() {
+    if (disabled) return;
     setDraft(title);
     setError(null);
     setEditing(true);
@@ -43,9 +45,11 @@ export function EditableTitle({ title, onSave }: Props) {
     return (
       <h2 className="list-title">
         {title}
-        <button type="button" className="icon-button" aria-label="Edit title" onClick={startEdit}>
-          ✏️
-        </button>
+        {!disabled && (
+          <button type="button" className="icon-button" aria-label="Edit title" onClick={startEdit}>
+            ✏️
+          </button>
+        )}
       </h2>
     );
   }

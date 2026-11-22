@@ -12,6 +12,7 @@ interface Props {
   isFirst: boolean;
   isLast: boolean;
   orderingDisabled: boolean;
+  readOnly?: boolean;
   onToggleComplete: (bookId: number, completed: boolean) => void;
   onMove: (entryId: number, direction: 'up' | 'down') => void;
   onLocationChange: (bookId: number, slot: 1 | 2 | 3, locationId: number | null) => void;
@@ -32,6 +33,7 @@ export function BookRow({
   isFirst,
   isLast,
   orderingDisabled,
+  readOnly = false,
   onToggleComplete,
   onMove,
   onLocationChange,
@@ -61,6 +63,7 @@ export function BookRow({
         type="checkbox"
         className="book-complete-checkbox"
         checked={book.completed}
+        disabled={readOnly}
         onChange={(e) => onToggleComplete(book.book_id, e.target.checked)}
         aria-label={`Mark ${titleText} complete`}
       />
@@ -97,6 +100,7 @@ export function BookRow({
           <select
             key={field}
             value={book[field] ?? ''}
+            disabled={readOnly}
             onChange={(e) =>
               onLocationChange(book.book_id, (idx + 1) as 1 | 2 | 3, e.target.value ? Number(e.target.value) : null)
             }
@@ -114,6 +118,7 @@ export function BookRow({
 
       <NoteList
         notes={book.notes}
+        readOnly={readOnly}
         onAdd={(text) => onAddNote(book.book_id, text)}
         onUpdate={onUpdateNote}
         onDelete={onDeleteNote}
@@ -124,7 +129,9 @@ export function BookRow({
         className="drag-handle"
         aria-label="Drag to reorder"
         disabled={orderingDisabled}
-        title={orderingDisabled ? 'Show read comics to reorder' : undefined}
+        title={
+          readOnly ? 'Requires network' : orderingDisabled ? 'Show read comics to reorder' : undefined
+        }
         {...attributes}
         {...listeners}
       >
@@ -135,7 +142,8 @@ export function BookRow({
         type="button"
         className="book-delete-button"
         aria-label={`Remove ${titleText} from list`}
-        title="Remove from list"
+        title={readOnly ? 'Requires network' : 'Remove from list'}
+        disabled={readOnly}
         onClick={() => onRemove(entryId, titleText)}
       >
         🗑
