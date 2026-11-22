@@ -11,3 +11,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>
 );
+
+// Cache the app shell after a warm visit so a reload can still boot offline.
+// List data itself is persisted separately in localStorage.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Registration can fail on unsupported hosts; online use still works.
+    });
+  });
+}
