@@ -1,18 +1,37 @@
 /* Minimal same-origin shell cache so a warm visit can reload offline.
    App data (lists) lives in localStorage; this only covers HTML/JS/CSS/icons. */
-const CACHE = 'comiclist-shell-v1';
+const CACHE = 'comiclist-shell-v2';
+
+async function precacheShell(cache) {
+  const roots = ['/', '/index.html', '/favicon.svg', '/favicon-32.png', '/apple-touch-icon.png'];
+  await cache.addAll(roots);
+
+  // Vite emits hashed /assets/* links in index.html — precache those too.
+  try {
+    const htmlResponse = await cache.match('/index.html') || (await fetch('/index.html'));
+    const html = await htmlResponse.clone().text();
+    if (!(await cache.match('/index.html'))) {
+      await cache.put('/index.html', htmlResponse.clone());
+    }
+    const assetPaths = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1]);
+    if (assetPaths.length > 0) {
+      await cache.addAll(assetPaths);
+    }
+  } catch {
+    // Install still succeeds with the roots; runtime caching may fill the rest.
+  }
+}
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(['/', '/index.html', '/favicon.svg'])).then(() => self.skipWaiting())
-  );
+  event.waitUntil(caches.open(CACHE).then(precacheShell).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
@@ -23,7 +42,6 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Network-first for navigations and assets; fall back to cache when offline.
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -34,12 +52,12 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(async () => {
-        const cached = await caches.match(request);
+        const cache = await caches.open(CACHE);
+        const cached =
+          (await cache.match(request)) ||
+          (await cache.match(url.pathname)) ||
+          (request.mode === 'navigate' ? (await cache.match('/index.html')) || (await cache.match('/')) : null);
         if (cached) return cached;
-        if (request.mode === 'navigate') {
-          const shell = (await caches.match('/index.html')) || (await caches.match('/'));
-          if (shell) return shell;
-        }
         throw new Error('offline-miss');
       })
   );
