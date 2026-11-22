@@ -3,6 +3,7 @@ import type { Note } from '../lib/types';
 
 interface Props {
   notes: Note[];
+  readOnly?: boolean;
   onAdd: (text: string) => void | Promise<void>;
   onUpdate: (noteId: number, text: string) => void | Promise<void>;
   onDelete: (noteId: number) => void | Promise<void>;
@@ -23,16 +24,18 @@ function linkify(text: string) {
   );
 }
 
-export function NoteList({ notes, onAdd, onUpdate, onDelete }: Props) {
+export function NoteList({ notes, readOnly = false, onAdd, onUpdate, onDelete }: Props) {
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [draft, setDraft] = useState('');
 
   function startEdit(note: Note) {
+    if (readOnly) return;
     setEditingId(note.note_id);
     setDraft(note.note_text);
   }
 
   function startNew() {
+    if (readOnly) return;
     setEditingId('new');
     setDraft('');
   }
@@ -60,9 +63,11 @@ export function NoteList({ notes, onAdd, onUpdate, onDelete }: Props) {
     <div className="book-notes">
       <div className="book-notes-header">
         <span className="book-notes-label">Notes</span>
-        <button type="button" className="note-add-button" onClick={startNew} aria-label="Add note" title="Add note">
-          +
-        </button>
+        {!readOnly && (
+          <button type="button" className="note-add-button" onClick={startNew} aria-label="Add note" title="Add note">
+            +
+          </button>
+        )}
       </div>
       <div className="book-notes-list">
         {notes.map((note) =>
@@ -81,7 +86,12 @@ export function NoteList({ notes, onAdd, onUpdate, onDelete }: Props) {
               placeholder="Clear text to delete this note"
             />
           ) : (
-            <div key={note.note_id} className="note-item" onClick={() => startEdit(note)} title="Click to edit">
+            <div
+              key={note.note_id}
+              className="note-item"
+              onClick={() => startEdit(note)}
+              title={readOnly ? undefined : 'Click to edit'}
+            >
               {linkify(note.note_text)}
             </div>
           )
